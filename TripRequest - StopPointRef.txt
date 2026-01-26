@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Trias version="1.2" xmlns="http://www.vdv.de/trias" xmlns:siri="http://www.siri.org.uk/siri" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.vdv.de/trias ../trias-xsd-v1.1/Trias.xsd">
+    <ServiceRequest>
+        <RequestTimestamp>2024-09-25T11:30:00Z</RequestTimestamp>
+        <siri:RequestorRef>IHR REQUESTOR-KEY</siri:RequestorRef>
+        <RequestPayload>
+            <TripRequest>
+                <Origin>
+                    <LocationRef>
+                        <StopPointRef>de:08222:2417</StopPointRef>
+                        <LocationName>
+                            <Text>Mannheim, Hauptbahnhof</Text>
+                        </LocationName>
+                    </LocationRef>
+                    <DepArrTime>2024-09-25T11:30:00.000Z</DepArrTime>
+                </Origin>
+                <Destination>
+                    <LocationRef>
+                        <StopPointRef>de:08221:1160</StopPointRef>
+                        <LocationName>
+                            <Text>Heidelberg, Hauptbahnhof</Text>
+                        </LocationName>
+                    </LocationRef>
+                </Destination>
+                <Params>
+                    <NumberOfResults>5</NumberOfResults>
+                    <IncludeTrackSections>true</IncludeTrackSections>
+                    <IncludeIntermediateStops>true</IncludeIntermediateStops>
+                    <IncludeLegProjection>true</IncludeLegProjection>
+                    <IncludeFares>true</IncludeFares>
+                </Params>
+            </TripRequest>
+        </RequestPayload>
+    </ServiceRequest>
+</Trias>
