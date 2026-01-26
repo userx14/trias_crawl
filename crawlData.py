@@ -15,18 +15,16 @@ def stopPointReference_from_name(locationName):
     locationInfoRequest.initial_input.location_name      = locationName
     locationInfoRequest.location_param_structure.number_of_results = 5
     
-    result = (findStationRequest.query(url))
-    #print(response.text)
-    root = ET.XML(result)
-    ET.indent(root)
-    pretty = ET.tostring(root, encoding='unicode')
-    print(pretty)
-    with open("out.txt", "w", encoding="utf-8") as outfile:
-        outfile.write(pretty)
+    print(locationInfoRequest)
     
+    findStationResponse = findStationRequest.query(url)
+    locationInfoResponse = findStationResponse.service_delivery.delivery_payload.location_information_response
+    for locationResult in locationInfoResponse.location_results_list:
+        print(locationResult.location.stop_point.stop_point_ref)
+        print(locationResult.location.stop_point.stop_point_name.text)
+        
 stopPointReference_from_name("Stuttgart (tief)")
-
-#analysis part
+#stopPointReference_from_name("Stuttgart HBF (tief)") todo fix, is currently broken
 
 """
 def stopPointRef_from_LocationName(LocationName):

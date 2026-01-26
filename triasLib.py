@@ -124,6 +124,9 @@ class LocationResultStructure(BaseXmlModel, tag="LocationResult", **sharedArgs):
 
 class LocationInformationResponse(BaseXmlModel, tag="LocationInformationResponse", **sharedArgs):
     location_results_list: List[LocationResultStructure] = element()
+    
+class TripInformationResponse(BaseXmlModel, tag="TripInformationResponse", **sharedArgs):
+    pass
 
 class TripInfoRequest(BaseXmlModel, tag="TripInfoRequest", **sharedArgs):
     journey_ref: str                = element(tag="JourneyRef")
@@ -170,15 +173,31 @@ class ServiceRequest(BaseXmlModel, tag="ServiceRequest", **sharedArgs):
         return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 class DeliveryPayload(BaseXmlModel, tag="DeliveryPayload", **sharedArgs):
-    pass
+    location_information_response: Optional[LocationInformationResponse] = element(
+        tag="LocationInformationResponse", default=None
+    )
+    trip_information_response: Optional[TripInformationResponse] = element(
+        tag="TripInformationResponse", default=None
+    )
 
 class ServiceDelivery(BaseXmlModel, tag="ServiceDelivery", **sharedArgs):
     response_timestamp: datetime      = element(tag="ResponseTimestamp",  ns="siri")
     producer_ref: str                 = element(tag="ProducerRef",        ns="siri")
     status: str                       = element(tag="Status",             ns="siri")
-    language: str                     = element(tag="Language",           ns="siri")
+    language: str                     = element(tag="Language")
     calc_time: int                    = element(tag="CalcTime")
-    delivery_payload: DeliveryPayload = element()
+    delivery_payload: DeliveryPayload = element(tag="DeliveryPayload")
+    @field_validator("response_timestamp", mode="before")
+    def ensure_utc(cls, value):
+        if isinstance(value, str):
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return dt.astimezone(timezone.utc).replace(microsecond=0)
+        if isinstance(value, datetime):
+            return value.astimezone(timezone.utc).replace(microsecond=0)
+        return None  
+    @field_serializer("response_timestamp")
+    def serialize_date_only(self, value: datetime):
+        return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 class Trias(BaseXmlModel, tag="Trias", **sharedArgs):
     version: str = attr()
@@ -188,7 +207,7 @@ class Trias(BaseXmlModel, tag="Trias", **sharedArgs):
         xmlTx = self.to_xml(skip_empty=True)
         requestHeader = {"Content-Type": "application/xml; charset=utf-8", "User-Agent": "Python-urllib/3.10"}
         response = requests.post(url, data=xmlTx, headers=requestHeader)
-        return response.content
+        return Trias.from_xml(response.content)
     
 
 """
