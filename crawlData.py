@@ -1,5 +1,34 @@
+from triasLib import Trias
+from datetime import datetime
+from pathlib import Path
+import xml.etree.ElementTree as ET
+url          = "https://efa-bw.de/trias"
+requestorKey = open("requestor.key").read()
+def stopPointReference_from_name(locationName):
+    findStationRequestXml = Path("LocationInformationRequest_findTrainStations.xml")
+    findStationRequestXml = open(findStationRequestXml, "rb").read()
+    
+    findStationRequest = Trias.from_xml(findStationRequestXml)
+    findStationRequest.service_request.request_timestamp = datetime.now()
+    findStationRequest.service_request.requestor_ref     = requestorKey
+    locationInfoRequest = findStationRequest.service_request.request_payload.location_information_request
+    locationInfoRequest.initial_input.location_name      = locationName
+    locationInfoRequest.location_param_structure.number_of_results = 5
+    
+    result = (findStationRequest.query(url))
+    #print(response.text)
+    root = ET.XML(result)
+    ET.indent(root)
+    pretty = ET.tostring(root, encoding='unicode')
+    print(pretty)
+    with open("out.txt", "w", encoding="utf-8") as outfile:
+        outfile.write(pretty)
+    
+stopPointReference_from_name("Stuttgart (tief)")
+
 #analysis part
 
+"""
 def stopPointRef_from_LocationName(LocationName):
     xmlTx    = location_information_request(LocationName, NumberOfResults=5)
     response = requests.post(url, data=xmlTx.encode('utf-8'), headers=requestHeader)
@@ -39,7 +68,7 @@ def tripsStammstrecke(time):
     print(ET.tostring(root, encoding='unicode'))
 
 tripsStammstrecke(datetime.now())
-"""
+
 
 #xml = trip_information_request("ddb:90T10:B:H", datetime.now())
 #xml = trip_request("test", datetime.now(), "test2")
@@ -55,7 +84,7 @@ pretty = ET.tostring(delivery_payload, encoding='unicode')
 print(pretty)
 with open("out.txt", "w", encoding="utf-8") as outfile:
     outfile.write(pretty)
-"""
+
 
 trias.key("")
 trias.url("")
@@ -68,3 +97,4 @@ req.StopEventRequest.Location.LocationRef.StopPointRef   = "de:08111:6118"
 req.StopEventRequest.Location.Params.IncludeRealtimeData = True
 response = trias.send(req)
 response.trip
+"""
