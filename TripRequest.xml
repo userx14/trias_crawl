@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Trias version="1.2" xmlns="http://www.vdv.de/trias" xmlns:siri="http://www.siri.org.uk/siri" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.vdv.de/trias ../trias-xsd-v1.1/Trias.xsd">
+    <ServiceRequest>
+        <RequestTimestamp>1990-01-01T00:00:00Z</RequestTimestamp>
+        <siri:RequestorRef>needsToBeFilled</siri:RequestorRef>
+        <RequestPayload>
+            <TripRequest>
+                <Origin>
+                    <LocationRef>
+                        <StopPointRef>needsToBeFilled</StopPointRef>
+                    </LocationRef>
+                    <DepArrTime>1990-01-01T00:00:00Z</DepArrTime>
+                </Origin>
+                <Destination>
+                    <LocationRef>
+                        <StopPointRef>needsToBeFilled</StopPointRef>
+                    </LocationRef>
+                </Destination>
+                <Params>
+                    <NumberOfResults>5</NumberOfResults>
+                    <IgnoreRealtimeData>true</IgnoreRealtimeData>
+                    <OperatorFilter>
+                        <Exclude>false</Exclude>
+                        <OperatorRef>ddb:00</OperatorRef>
+                    </OperatorFilter>
+                </Params>
+            </TripRequest>
+        </RequestPayload>
+    </ServiceRequest>
+</Trias>
