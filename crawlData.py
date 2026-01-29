@@ -64,7 +64,21 @@ def stopPointRef_from_LocationName(LocationName):
     print(validStops)
     return validStops[0][1]
 
-def tripRef_from_departingStop(originRef, departureTime: datetime, numResults=5):
+def delay_from_serviceCall(serviceCallDict):
+    if serviceCallDict is None:
+        return None
+    timetableTime = serviceCallDict["TimetabledTime"]
+    timetableTime = datetime.strptime(timetableTime, "%Y-%m-%dT%H:%M:%SZ")
+    timetableTime = timetableTime.replace(tzinfo=timezone.utc)
+    timetableTime = timetableTime.astimezone()
+
+    estimatedTime = serviceCallDict["EstimatedTime"]
+    estimatedTime = datetime.strptime(estimatedTime, "%Y-%m-%dT%H:%M:%SZ")
+    estimatedTime = estimatedTime.replace(tzinfo=timezone.utc)
+    estimatedTime = estimatedTime.astimezone()
+    return (estimatedTime - timetableTime).total_seconds() / 60
+
+def tripRef_from_departingStop(originRef, departureTime: datetime, numResults=5, opRef=""):
     stopEventRequestXml = Path("./StopEventRequest.xml")
     stopEventRequestXml = open(stopEventRequestXml, "rb").read()
     stopEventRequest    = xmltodict.parse(stopEventRequestXml, process_namespaces=True, namespaces=namespaces)
@@ -73,6 +87,10 @@ def tripRef_from_departingStop(originRef, departureTime: datetime, numResults=5)
     serviceRequest["RequestPayload"]["StopEventRequest"]["Location"]["LocationRef"]["StopPointRef"] = originRef
     datetimestring = departureTime.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     serviceRequest["RequestPayload"]["StopEventRequest"]["Location"]["LocationRef"]["DepArrTime"] = datetimestring
+    serviceRequest["RequestPayload"]["StopEventRequest"]["Params"]["OperatorFilter"] = {"Exclude": "false", "OperatorRef": "ddb:00"}
+    serviceRequest["RequestPayload"]["StopEventRequest"]["Params"]["IncludePreviousCalls"] = "true"
+    serviceRequest["RequestPayload"]["StopEventRequest"]["Params"]["IncludeOnwardCalls"] = "true"
+    serviceRequest["RequestPayload"]["StopEventRequest"]["Params"]["IncludeRealtimeData"] = "true"
     serviceRequest["RequestPayload"]["StopEventRequest"]["Params"]["NumberOfResults"] = numResults
 
     stopEventResponse = sendRequest(stopEventRequest)
@@ -80,12 +98,52 @@ def tripRef_from_departingStop(originRef, departureTime: datetime, numResults=5)
 
     serviceDelivery = stopEventResponse["Trias"]["ServiceDelivery"]
     
-    print(serviceDelivery["DeliveryPayload"]["StopEventResponse"]["StopEventResponseContext"]["Situations"]["PtSituation"].keys())
-    
+    for stopEvent in serviceDelivery["DeliveryPayload"]["StopEventResponse"]["StopEventResult"]:
+        previousStops = stopEvent["StopEvent"].get("PreviousCall") or []
+        thisStop =      stopEvent["StopEvent"].get("ThisCall")
+        nextStops =     stopEvent["StopEvent"].get("OnwardCall") or []
+        serviceData =   stopEvent["StopEvent"].get("Service")
+
+        if serviceData.get("Cancelled") == "true":
+            raise ValueError("Debugging cancelled train :)")
+        if serviceData.get("Unplanned") == "true":
+            raise ValueError("Debugging unplanned train :)")
+        if serviceData.get("Deviation") == "true":
+            raise ValueError("Debugging deviated train :)")
+
+
+
+        if serviceData:
+            trainJourney =  serviceData["JourneyRef"]
+            trainLineName = serviceData["ServiceSection"]["PublishedLineName"]["Text"]
+            trainOrigin =   serviceData["OriginText"]["Text"]
+            trainDestination = serviceData["DestinationText"]["Text"]
+            print(f"{trainLineName} ({trainJourney}) from {trainOrigin} to {trainDestination}")
+
+            for att in serviceData["Attribute"]:
+                if "Incident" in att["Code"]:
+                    incidentText = att["Text"]["Text"]
+                    print(f"warning incident report: {incidentText}")
+
+        allStops = previousStops + [thisStop] + nextStops
+        for stop in allStops:
+            stopPointRef  = stop["CallAtStop"]["StopPointRef"]
+            stopPointName = stop["CallAtStop"]["StopPointName"]["Text"]
+            arrivalDelay = delay_from_serviceCall(stop["CallAtStop"].get("ServiceArrival"))
+            departureDelay = delay_from_serviceCall(stop["CallAtStop"].get("ServiceDeparture"))
+            print(f"delayAr: {arrivalDelay}, delayDe: {departureDelay} @{stopPointName}")
+        print("====\n\n")
+    return
+
+
     journeyRefs = set()
     journeyApproxTimes = dict()
     for stopEvent in serviceDelivery["DeliveryPayload"]["StopEventResponse"]["StopEventResult"]:
-        print(stopEvent["StopEvent"]["Service"]["Attribute"])
+        print(stopEvent.keys())
+        print(stopEvent["StopEvent"]["Service"])
+        if "Attribute" in stopEvent["StopEvent"]["Service"].keys():
+            print(stopEvent["StopEvent"]["Service"]["Attribute"])
+        print(stopEvent["StopEvent"]["Service"]["JourneyRef"])
         timetabledTime = stopEvent["StopEvent"]["ThisCall"]["CallAtStop"]["ServiceDeparture"]["TimetabledTime"]
         timetabledTime = datetime.strptime(timetabledTime, "%Y-%m-%dT%H:%M:%SZ")
         timetabledTime = timetabledTime.replace(tzinfo=timezone.utc)
@@ -129,18 +187,10 @@ def getTripInformation(tripRef, operatingDayRef):
     datetimestring = operatingDayRef.astimezone(timezone.utc).strftime("%Y-%m-%dT")
     serviceRequest["RequestPayload"]["TripInfoRequest"]["OperatingDayRef"] = datetimestring
     #serviceRequest["RequestPayload"]["TripInfoRequest"]["Params"]["IncludePosition"] = "true"
-    print(tripInfoRequest)
     tripInfoResponse = sendRequest(tripInfoRequest)
     printResponseStatistics(tripInfoResponse)
 
-    print(len(str(tripInfoResponse)))
-    #exit(0) 
-    
-    
-    
     serviceDelivery = tripInfoResponse["Trias"]["ServiceDelivery"]
-    print("servdel")
-    print(serviceDelivery)
     if("ErrorMessage" in serviceDelivery["DeliveryPayload"]["TripInfoResponse"].keys()):
         print(serviceDelivery["DeliveryPayload"]["TripInfoResponse"]["ErrorMessage"]["Code"])
         return
@@ -210,15 +260,24 @@ def getTripInformation(tripRef, operatingDayRef):
 
 
 
-#hauptbahnhofRef = "de:08111:6118"#stopPointRef_from_LocationName("Stuttgart (tief)")
+#print(stopPointRef_from_LocationName("Zuffenhausen"))
+#exit(0)
+zuffenhausen= "de:08111:6465"
+
+schwabstraßeRef= "de:08111:6052"
+hauptbahnhofRef = "de:08111:6118"
 
 # get all journeys that pass through stadtmitte
 
 stadtmitteRef    = "de:08111:6052"
 todayMidnight    = datetime.combine(datetime.now().date(), datetime.min.time())
-journeysAndDates, journeyRoughTime = tripRef_from_departingStop(stadtmitteRef, todayMidnight, numResults=5)
-"""
+
+journeysAndDates, journeyRoughTime = tripRef_from_departingStop(hauptbahnhofRef, datetime.now(), numResults=10)
+print(journeysAndDates)
+
 print(journeyRoughTime)
+"""
+
 #count statistics
 uniqueDates = set([it[1] for it in journeysAndDates])
 resultCount = []
@@ -230,9 +289,4 @@ for date in uniqueDates:
     resultCount.append((date, counter))
 """
 
-#getTripInformation(f"ddb:92T03::R:j26:1384", datetime.now())
-#getTripInformation(f"ddb:92T01::H:j26:646", datetime.now(), test="false")
-"""
-for i in range(10):
-
-"""
+#getTripInformation(f"ddb:92T04::H:j26:152", datetime.now())
