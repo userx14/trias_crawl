@@ -13,7 +13,8 @@
                     </LocationRef>
                 </Location>
                 <Params>
-                  <IncludeRealtimeData>false</IncludeRealtimeData>
+                  <StopEventType>both</StopEventType>
+                  <IncludeRealtimeData>true</IncludeRealtimeData>
                   <PtModeFilter>
                       <Exclude>false</Exclude>
                       <PtMode>rail</PtMode>
