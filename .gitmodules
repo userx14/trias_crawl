@@ -1,0 +1,6 @@
+[submodule "TRIAS"]
+	path = TRIAS
+	url = https://github.com/VDVde/TRIAS.git
+[submodule "trias_xsd"]
+	path = trias_xsd
+	url = https://github.com/VDVde/TRIAS.git
