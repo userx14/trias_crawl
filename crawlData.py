@@ -5,7 +5,7 @@ from pathlib import Path
 import logging
 
 logger = logging.getLogger("")
-logger.setLevel(logging.DEBUG)
+#logger.setLevel(logging.DEBUG)
 
 url = "https://efa-bw.de/trias"
 requestorKey = open(Path("./requestor.key")).read()
@@ -24,6 +24,10 @@ def sendRequest(requestAsDict):
     serviceRequest["siri:RequestorRef"]     = requestorKey
 
     requestAsXml = xmltodict.unparse(requestAsDict, pretty=True)
+
+    import xmlschema
+    xmlschema.validate(requestAsXml, './TRIAS-1.2/Trias.xsd')
+
     response = requests.post(url, data=requestAsXml, headers=requestHeader)
     return xmltodict.parse(response.content, process_namespaces=True, namespaces=namespaces)
 
@@ -77,7 +81,7 @@ def stopPointRef_from_LocationName(LocationName):
         name = locationResult["Location"]["StopPoint"]["StopPointName"]["Text"]
         validStops.append((name, ref))
     print(validStops)
-    return validStops[0][1]
+    return validStops[0]
 
 def delay_from_serviceCall(serviceCallDict):
     if serviceCallDict is None:
@@ -86,121 +90,180 @@ def delay_from_serviceCall(serviceCallDict):
     estimatedTime = datetimeFromTriasStr(serviceCallDict["EstimatedTime"])
     return (estimatedTime - timetableTime).total_seconds() / 60
 
-def getAllDelaysThroughStation(passingThroughRef, numResults=5, opRef=""):
+def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults=5, opRef=""):
     #query should also match trains that have already passed through the station some time ago
     currentTime         = datetime.now().astimezone()
-    departureAtStopTime = triasStrFromDatetime(currentTime - timedelta(hours=4))
+    departureAtStopTime = triasStrFromDatetime(currentTime - timedelta(hours=2))
     operatorFilter      = {"Exclude": "false", "OperatorRef": "ddb:00"}
+    ptModeFilter        = {"Exclude": "false", "PtMode": "urbanRail", "RailSubmode": "suburbanRailway"}
 
     stopEventRequestXml = Path("./StopEventRequest.xml")
     stopEventRequestXml = open(stopEventRequestXml, "rb").read()
     stopEventRequest    = xmltodict.parse(stopEventRequestXml, process_namespaces=True, namespaces=namespaces)
 
-
     serviceRequest   = stopEventRequest["Trias"]["ServiceRequest"]
     stopEventRequestPayload = serviceRequest["RequestPayload"]["StopEventRequest"]
     stopEventRequestPayload["Location"]["LocationRef"]["StopPointRef"] = passingThroughRef
-    stopEventRequestPayload["Location"]["LocationRef"]["DepArrTime"]   = departureAtStopTime
-    print(stopEventRequestPayload["Location"]["LocationRef"])
-    stopEventRequestPayload["Params"]["OperatorFilter"]                = operatorFilter
+    stopEventRequestPayload["Location"]["LocationRef"]["LocationName"] = {"Text": passingThroughName}
+    #stopEventRequestPayload["Location"]["LocationRef"]["DepArrTime"]   = departureAtStopTime
+    stopEventRequestPayload["Location"]["DepArrTime"]                  = departureAtStopTime
+    stopEventRequestPayload["Params"] = {}
+    stopEventRequestPayload["Params"]["PtModeFilter"]                  = ptModeFilter
+    #stopEventRequestPayload["Params"]["OperatorFilter"]               = operatorFilter
+    stopEventRequestPayload["Params"]["NumberOfResults"]               = numResults
+    stopEventRequestPayload["Params"]["StopEventType"]                 = "both"
     stopEventRequestPayload["Params"]["IncludePreviousCalls"]          = "true"
     stopEventRequestPayload["Params"]["IncludeOnwardCalls"]            = "true"
     stopEventRequestPayload["Params"]["IncludeRealtimeData"]           = "true"
-    stopEventRequestPayload["Params"]["NumberOfResults"]               = numResults
+
 
     stopEventResponse = sendRequest(stopEventRequest)
     printResponseStatistics(stopEventResponse)
 
     serviceDelivery = stopEventResponse["Trias"]["ServiceDelivery"]
-    delaysForLines = {}
+    delaysForJourneys = {}
+    toEarly = 0
+    toLate = 0
+    inAcqT = 0
+    error = 0
+
     for stopEvent in serviceDelivery["DeliveryPayload"]["StopEventResponse"]["StopEventResult"]:
-        
-        serviceData   = stopEvent["StopEvent"]["Service"]
+        serviceData = stopEvent["StopEvent"]["Service"]
         trainJourney     = serviceData["JourneyRef"]
         trainLineName    = serviceData["ServiceSection"]["PublishedLineName"]["Text"]
         trainOrigin      = serviceData["OriginText"]["Text"]
         trainDestination = serviceData["DestinationText"]["Text"]
         
-        print(f"{trainLineName} ({trainJourney}) from {trainOrigin} to {trainDestination}")
+        logger.info(f"{trainLineName} ({trainJourney}) from {trainOrigin} to {trainDestination}")
         
-        previousStops = stopEvent["StopEvent"].get("PreviousCall") or []
-        thisStop      = stopEvent["StopEvent"].get("ThisCall")
-        nextStops     = stopEvent["StopEvent"].get("OnwardCall") or []
-        allStops      = previousStops + [thisStop] + nextStops
-        
-        firstStopCall = allStops[0]["CallAtStop"]
-        firstStopDeparture = datetimeFromTriasStr(firstStopCall["ServiceDeparture"]["TimetabledTime"])
-        lastStopCall = allStops[-1]["CallAtStop"]
-        lastStopArrival = datetimeFromTriasStr(lastStopCall["ServiceArrival"]["TimetabledTime"])
-        print(f"from {firstStopDeparture} to {lastStopArrival}")
+        allStops = []
+        for cls in ["PreviousCall", "ThisCall", "OnwardCall"]:
+            stopOrStopsList = stopEvent["StopEvent"].get(cls)
+            if isinstance(stopOrStopsList, dict):
+                allStops.append(stopOrStopsList)
+            elif isinstance(stopOrStopsList, list):
+                allStops.extend(stopOrStopsList)
 
-        #check if last first stop in journey before the current time
-        
-        departureDict = firstStopCall.get("ServiceDeparture")
-        timetableDeparture = datetimeFromTriasStr(departureDict["TimetabledTime"])
-        if currentTime < timetableDeparture:
-            logging.info(f"train has not started yet, will start at {timetableDeparture}")
+        firstStop = allStops[0]
+        lastStop  = allStops[-1]
+
+        firstStopDeparture      = firstStop["CallAtStop"]["ServiceDeparture"]
+        firstStopTimetDeparture = datetimeFromTriasStr(firstStopDeparture["TimetabledTime"])
+        firstStopEstimDeparture = datetimeFromTriasStr(firstStopDeparture.get("EstimatedTime"))
+
+        lastStopArrival      = lastStop["CallAtStop"]["ServiceArrival"]
+        lastStopTimetArrival = datetimeFromTriasStr(lastStopArrival["TimetabledTime"])
+        lastStopEstimArrival = datetimeFromTriasStr(lastStopArrival.get("EstimatedTime"))
+
+        logger.info(f"from {firstStopTimetDeparture} to {lastStopTimetArrival}")
+
+        #check if last first stop is still in the future
+        if currentTime < firstStopTimetDeparture:
+            logging.info(f"train has not started yet, will start at {firstStopTimetDeparture}")
+            toEarly += 1
             continue
+
+        #check if the last stop in journey is already in the past
+        if lastStopEstimArrival:
+            if lastStopEstimArrival < currentTime:
+                toLate += 1
+                logging.info(f"train has already ended at final stop at estim {lastStopTimetArrival}")
+                continue
+        else:
+            if lastStopTimetArrival < currentTime:
+                toLate += 1
+                logging.info(f"train has already ended at final stop at timet {lastStopTimetArrival}")
+                continue
+
+
 
         #check which stop whas the last passed one
         delay = None
         for stop in allStops[::-1]:
+            logger.info(allStops.index(stop))
+            logger.info(stop["CallAtStop"]["StopPointName"]["Text"])
             departureDict = stop["CallAtStop"].get("ServiceDeparture")
             if departureDict is not None:
                 timetableDeparture = datetimeFromTriasStr(departureDict["TimetabledTime"])
+                logging.debug(f"departTT: {timetableDeparture}")
                 estimateDeparture  = datetimeFromTriasStr(departureDict.get("EstimatedTime"))
+                logging.debug(f"departES: {estimateDeparture}")
             arrivalDict = stop["CallAtStop"].get("ServiceArrival")
             if arrivalDict is not None:
                 timetableArrival = datetimeFromTriasStr(arrivalDict["TimetabledTime"])
+                logging.debug(f"arriveTT: {timetableArrival}")
                 estimateArrival  = datetimeFromTriasStr(arrivalDict.get("EstimatedTime"))
+                logging.debug(f"arriveES: {estimateArrival}")
 
             #check if stop has been reached
-            if (departureDict is not None) and (estimateArrival < currentTime):
+            if (departureDict is not None) and (estimateDeparture is not None) and (estimateDeparture < currentTime):
                 delay = estimateDeparture - timetableDeparture
                 break
-            if (arrivalDict is not None) and (estimateArrival < currentTime):
+            elif (arrivalDict is not None) and (estimateArrival is not None) and (estimateArrival < currentTime):
                 delay = estimateArrival - timetableArrival
                 break
-        #check if train has already arrived at last stop
-        if stop == allStops[-1]:
-            logging.info("train has already arrived at final stop")
-            print("====\n\n")
-            continue
+        else:
+            error += 1
+            print("probably error, no delay info")
+
+
         currentStopName = stop["CallAtStop"]["StopPointName"]["Text"]
         print(f"delay: {delay}, at station {currentStopName}")
-        
-
+        inAcqT += 1
         if serviceData.get("Cancelled") == "true":
             logging.error("cancelled train :)")
         if serviceData.get("Unplanned") == "true":
             logging.error("Unplanned train :)")
         if serviceData.get("Deviation") == "true":
             logging.error("Deviated train :)")
+        attributes = serviceData.get("Attribute")
+        incidentText = None
+        if attributes:
+            #if there is only a single attribute, make it a list so the following code can correctely handle it
+            attributes = attributes if isinstance(attributes, list) else [attributes]
+            for att in attributes:
+                if "Incident" in att["Code"]:
+                    incidentText = att["Text"]["Text"]
+                    print(f"warning incident report: {incidentText}")
 
-        for att in serviceData["Attribute"]:
-            if "Incident" in att["Code"]:
-                incidentText = att["Text"]["Text"]
-                print(f"warning incident report: {incidentText}")
-        
         if delay is not None:
             delay = delay.total_seconds()/60
-        if trainLineName not in delaysForLines.keys():
-            delaysForLines[trainLineName] = [delay]
-        else:
-            delaysForLines[trainLineName].append(delay)
-        
-    return delaysForLines
+        delaysForJourneys[trainJourney] = (delay, trainLineName, incidentText)
+    print(f"Stats: e{toEarly}, l{toLate}, a{inAcqT}, err{error}")
+    return delaysForJourneys
 
 
 
 
 
-
-#print(stopPointRef_from_LocationName("Zuffenhausen"))
+#print(stopPointRef_from_LocationName("Ludwigsburg"))
 #exit(0)
-zuffenhausen= "de:08111:6465"
-schwabstraßeRef= "de:08111:6052"
-stadtmitteRef    = "de:08111:6052"
-hauptbahnhofRef = "de:08111:6118"
+checkAtStations = [
+    ('Zuffenhausen',  'de:08111:6465'),
+]
+"""
+checkAtStations = [
+    ('Zuffenhausen',  'de:08111:6465'),
+    ('Vaihingen',     'de:08111:6002'),
+    ('Ludwigsburg',   'de:08118:7402'),
+    ('Renningen',     'de:08115:7302'),
+    ('Böblingen',     'de:08115:7100'),
+    ('Bad Cannstatt', 'de:08111:6333')
+]
+"""
+delayInfoDict = {}
+for stationTuple in checkAtStations:
+    delayInfoDict |= getAllDelaysThroughStation(*stationTuple, numResults=100)
 
-print(getAllDelaysThroughStation(hauptbahnhofRef, numResults=50))
+
+delayPerLine = {}
+for journeyName, delayData in delayInfoDict.items():
+    print(f"{journeyName}: {delayData}")
+    delayLineName = delayData[1]
+    delayInMin = delayData[0]
+    if delayLineName in delayPerLine.keys():
+        delayPerLine[delayLineName].append(delayInMin)
+    else:
+        delayPerLine[delayLineName] = [delayInMin]
+
+print(delayPerLine)
