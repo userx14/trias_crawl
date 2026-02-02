@@ -25,8 +25,8 @@ def sendRequest(requestAsDict):
 
     requestAsXml = xmltodict.unparse(requestAsDict, pretty=True)
 
-    import xmlschema
-    xmlschema.validate(requestAsXml, './TRIAS-1.2/Trias.xsd')
+    #import xmlschema
+    #xmlschema.validate(requestAsXml, './trias_xsd/Trias.xsd')
 
     response = requests.post(url, data=requestAsXml, headers=requestHeader)
     return xmltodict.parse(response.content, process_namespaces=True, namespaces=namespaces)
@@ -93,7 +93,7 @@ def delay_from_serviceCall(serviceCallDict):
 def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults=5, opRef=""):
     #query should also match trains that have already passed through the station some time ago
     currentTime         = datetime.now().astimezone()
-    departureAtStopTime = triasStrFromDatetime(currentTime - timedelta(hours=2))
+    departureAtStopTime = triasStrFromDatetime(currentTime - timedelta(hours=1))
     operatorFilter      = {"Exclude": "false", "OperatorRef": "ddb:00"}
     ptModeFilter        = {"Exclude": "false", "PtMode": "urbanRail", "RailSubmode": "suburbanRailway"}
 
@@ -133,6 +133,7 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
         trainLineName    = serviceData["ServiceSection"]["PublishedLineName"]["Text"]
         trainOrigin      = serviceData["OriginText"]["Text"]
         trainDestination = serviceData["DestinationText"]["Text"]
+        operatingDayRef  = serviceData["OperatingDayRef"]
         
         logger.info(f"{trainLineName} ({trainJourney}) from {trainOrigin} to {trainDestination}")
         
@@ -157,7 +158,7 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
 
         logger.info(f"from {firstStopTimetDeparture} to {lastStopTimetArrival}")
 
-        #check if last first stop is still in the future
+        #check if first stop is still in the future
         if currentTime < firstStopTimetDeparture:
             logging.info(f"train has not started yet, will start at {firstStopTimetDeparture}")
             toEarly += 1
@@ -174,8 +175,6 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
                 toLate += 1
                 logging.info(f"train has already ended at final stop at timet {lastStopTimetArrival}")
                 continue
-
-
 
         #check which stop whas the last passed one
         delay = None
@@ -228,42 +227,52 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
 
         if delay is not None:
             delay = delay.total_seconds()/60
-        delaysForJourneys[trainJourney] = (delay, trainLineName, incidentText)
+        delaysForJourneys[(trainJourney, operatingDayRef)] = {
+            "delay": delay, 
+            "lineName": trainLineName, 
+            "incidentText": incidentText,
+            "currentStopName": currentStopName,
+            "destination": trainDestination,
+        }
     print(f"Stats: e{toEarly}, l{toLate}, a{inAcqT}, err{error}")
     return delaysForJourneys
 
-
-
-
-
-#print(stopPointRef_from_LocationName("Ludwigsburg"))
-#exit(0)
-checkAtStations = [
-    ('Zuffenhausen',  'de:08111:6465'),
-]
 """
-checkAtStations = [
-    ('Zuffenhausen',  'de:08111:6465'),
-    ('Vaihingen',     'de:08111:6002'),
-    ('Ludwigsburg',   'de:08118:7402'),
-    ('Renningen',     'de:08115:7302'),
-    ('Böblingen',     'de:08115:7100'),
-    ('Bad Cannstatt', 'de:08111:6333')
-]
+print(stopPointRef_from_LocationName("Esslingen (Neckar)"))
+exit(0)
 """
-delayInfoDict = {}
-for stationTuple in checkAtStations:
-    delayInfoDict |= getAllDelaysThroughStation(*stationTuple, numResults=100)
 
+def getCurrentRunningTrains():
+    checkAtStations = [
+        ('Zuffenhausen',       'de:08111:6465'),
+        ('Vaihingen',          'de:08111:6002'),
+        ('Ludwigsburg',        'de:08118:7402'),
+        ('Renningen',          'de:08115:7302'),
+        ('Böblingen',          'de:08115:7100'),
+        ('Bad Cannstatt',      'de:08111:6333'),
+        ('Schwabstraße',       'de:08111:6052'),
+        ('Waiblingen',         'de:08119:7604'),
+        ('Esslingen (Neckar)', 'de:08116:7800'),
+    ]
 
-delayPerLine = {}
-for journeyName, delayData in delayInfoDict.items():
-    print(f"{journeyName}: {delayData}")
-    delayLineName = delayData[1]
-    delayInMin = delayData[0]
-    if delayLineName in delayPerLine.keys():
-        delayPerLine[delayLineName].append(delayInMin)
-    else:
-        delayPerLine[delayLineName] = [delayInMin]
+    delayInfoDict = {}
+    for stationTuple in checkAtStations:
+        print(f"station {stationTuple[0]}")
+        delayInfoDict |= getAllDelaysThroughStation(*stationTuple, numResults=100)
 
-print(delayPerLine)
+    delayInfoDict = dict(sorted(delayInfoDict.items()))
+    
+    return delayInfoDict
+    """
+    delayPerLine = {}
+    for journeyRefAndDay, delayData in delayInfoDict.items():
+        print(f"{journeyRefAndDay[0]}: {delayData}")
+        delayLineName = delayData['lineName']
+        delayInMin = delayData['delay']
+        if delayLineName in delayPerLine.keys():
+            delayPerLine[delayLineName].append(delayInMin)
+        else:
+            delayPerLine[delayLineName] = [delayInMin]
+
+    print(delayPerLine)
+    """

@@ -9,18 +9,9 @@
                 <Location>
                     <LocationRef>
                         <StopPointRef>needsToBeFilled</StopPointRef>
-                        <DepArrTime>1990-01-01T00:00:00Z</DepArrTime>
                     </LocationRef>
+                    <DepArrTime>1990-01-01T00:00:00Z</DepArrTime>
                 </Location>
-                <Params>
-                  <StopEventType>both</StopEventType>
-                  <IncludeRealtimeData>true</IncludeRealtimeData>
-                  <PtModeFilter>
-                      <Exclude>false</Exclude>
-                      <PtMode>rail</PtMode>
-                      <RailSubmode>suburbanRailway</RailSubmode>
-                  </PtModeFilter>
-                </Params>
             </StopEventRequest>
         </RequestPayload>
     </ServiceRequest>
