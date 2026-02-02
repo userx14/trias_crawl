@@ -210,6 +210,7 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
         print(f"delay: {delay}, at station {currentStopName}")
         inAcqT += 1
         if serviceData.get("Cancelled") == "true":
+            logging.error(allStops)
             logging.error("cancelled train :)")
         if serviceData.get("Unplanned") == "true":
             logging.error("Unplanned train :)")
@@ -276,3 +277,4 @@ def getCurrentRunningTrains():
 
     print(delayPerLine)
     """
+print(getCurrentRunningTrains())
