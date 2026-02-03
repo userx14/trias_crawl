@@ -197,6 +197,11 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
 
             #check if stop has been reached
             if (departureDict is not None) and (estimateDeparture is not None) and (estimateDeparture < currentTime):
+                print(nextStopEstimArrival)
+                print(f"stN: {stopNumber}, {len(allStops)}")
+                if nextStopEstimArrival is None:
+                    for stop in allStops:
+                        print(stop)
                 #train has left station
                 delay = estimateDeparture - timetableDeparture
                 durationTravelingBetweenStops = currentTime - estimateDeparture
@@ -237,15 +242,15 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
 
         if delay is not None:
             delay = delay.total_seconds()/60
-        delaysForJourneys[(trainJourney, operatingDayRef)] = {
-            "delay":            delay, 
-            "lineName":         trainLineName, 
-            "incidentText":     incidentText,
-            "currentStopName":  currentStopName,
-            "currentStopRef":   currentStopRef,
-            "destination":      trainDestination,
-            "progressNextStop": progressToNextStop,
-        }
+            delaysForJourneys[trainJourney+":"+operatingDayRef] = {
+                "delay":            delay,
+                "lineName":         trainLineName,
+                "incidentText":     incidentText,
+                "currentStopName":  currentStopName,
+                "currentStopRef":   currentStopRef,
+                "destination":      trainDestination,
+                "progressNextStop": progressToNextStop,
+            }
     print(f"Stats: e{toEarly}, l{toLate}, a{inAcqT}, err{error}")
     return delaysForJourneys
 
@@ -271,14 +276,18 @@ def getCurrentRunningTrains():
     for stationTuple in checkAtStations:
         print(f"station {stationTuple[0]}")
         delayInfoDict |= getAllDelaysThroughStation(*stationTuple, numResults=100)
-
     delayInfoDict = dict(sorted(delayInfoDict.items()))
-    
     return delayInfoDict
-    """
+
+import json
+with open("./currentRunningTrains.json", "w") as outputfile:
+    allTrainsDict = getCurrentRunningTrains()
+    outputfile.write(json.dumps(allTrainsDict))
+
+
     delayPerLine = {}
-    for journeyRefAndDay, delayData in delayInfoDict.items():
-        print(f"{journeyRefAndDay[0]}: {delayData}")
+    for journeyRefAndDay, delayData in allTrainsDict.items():
+        print(f"{journeyRefAndDay}: {delayData}")
         delayLineName = delayData['lineName']
         delayInMin = delayData['delay']
         if delayLineName in delayPerLine.keys():
@@ -287,5 +296,3 @@ def getCurrentRunningTrains():
             delayPerLine[delayLineName] = [delayInMin]
 
     print(delayPerLine)
-    """
-#print(getCurrentRunningTrains())

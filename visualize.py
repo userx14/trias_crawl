@@ -1,7 +1,7 @@
 import xmltodict
 from svgpathtools import CubicBezier, parse_path
 from svgpathtools.parser import parse_transform
-from svgpathtools.path import translate, rotate
+from svgpathtools.path import translate, rotate, scale
 import math
 
 linesPathId  = {
@@ -17,36 +17,36 @@ linesPathId  = {
 
 linesStations = {
     "S1": [
-        ("de:08116:4211", "Kirchheim (T)"),
-        ("de:08116:4345", "Ötlingen"),
-        ("de:08116:4257", "Wendlingen (N)"),
-        ("de:08116:4241", "Wernau (N)"),
-        ("de:08116:7802", "Plochingen"),
-        ("de:08116:1800", "Altbach"),
-        ("de:08116:1803", "Zell"),
-        ("de:08116:1802", "Oberesslingen"),
-        ("de:08116:7800", "Esslingen (N)"),
-        ("de:08116:1801", "Mettingen"),
-        ("de:08111:6091", "Obertürkheim"),
-        ("de:08111:6085", "Untertürkheim"),
-        ("de:08111:6080", "Neckarpark"),
-        ("de:08111:6333", "Bad Cannstatt"),
-        ("de:08111:6118", "Stuttgart Hauptbahnhof (tief)"), 
-        ("de:08111:6056", "Stadtmitte"), 
-        ("de:08111:6221", "Feuersee"), 
-        ("de:08111:6052", "Schwabstraße"),
-        ("de:08111:6008", "Universität"),
-        ("de:08111:6027", "Österfeld"),
-        ("de:08111:6002", "Vaihingen"),
-        ("de:08111:6001", "Rohr"),
-        ("de:08115:3212", "Goldberg"),
-        ("de:08115:7100", "Böblingen"),
-        ("de:08115:7115", "Hulb"),
-        ("de:08115:5773", "Ehningen"),
-        ("de:08115:5774", "Gärtringen"),
-        ("de:08115:5775", "Nufringen"),
         ("de:08115:4512", "Herrenberg"),
-    ], 
+        ("de:08115:5775", "Nufringen"),
+        ("de:08115:5774", "Gärtringen"),
+        ("de:08115:5773", "Ehningen"),
+        ("de:08115:7115", "Hulb"),
+        ("de:08115:7100", "Böblingen"),
+        ("de:08115:3212", "Goldberg"),
+        ("de:08111:6001", "Rohr"),
+        ("de:08111:6002", "Vaihingen"),
+        ("de:08111:6027", "Österfeld"),
+        ("de:08111:6008", "Universität"),
+        ("de:08111:6052", "Schwabstraße"),
+        ("de:08111:6221", "Feuersee"),
+        ("de:08111:6056", "Stadtmitte"),
+        ("de:08111:6118", "Stuttgart Hauptbahnhof (tief)"),
+        ("de:08111:6333", "Bad Cannstatt"),
+        ("de:08111:6080", "Neckarpark"),
+        ("de:08111:6085", "Untertürkheim"),
+        ("de:08111:6091", "Obertürkheim"),
+        ("de:08116:1801", "Mettingen"),
+        ("de:08116:7800", "Esslingen (N)"),
+        ("de:08116:1802", "Oberesslingen"),
+        ("de:08116:1803", "Zell"),
+        ("de:08116:1800", "Altbach"),
+        ("de:08116:7802", "Plochingen"),
+        ("de:08116:4241", "Wernau (N)"),
+        ("de:08116:4257", "Wendlingen (N)"),
+        ("de:08116:4345", "Ötlingen"),
+        ("de:08116:4211", "Kirchheim (T)"),
+    ],
     "S2": [
         ("de:08119:7703", "Schorndorf"),
         ("de:08119:1704", "Weiler (R)"),
@@ -200,10 +200,12 @@ def placeTrain(lineName, currentStation, reverseDirection, progress, delayMin):
     linePath = linesPathId[lineName]
     parsedPath = parse_path(linePath["@d"])
     if reverseDirection:
+        print("revDir")
         parsedPath = parsedPath.reversed()
         stationIdList   = [station[0] for station in lineStations[::-1]]
         stationNameList = [station[1] for station in lineStations[::-1]]
     else:
+        print("normDir")
         stationIdList   = [station[0] for station in lineStations]
         stationNameList = [station[1] for station in lineStations]
     if currentStation in stationIdList:
@@ -228,8 +230,8 @@ def placeTrain(lineName, currentStation, reverseDirection, progress, delayMin):
     else:
         pathIdx = -1
         progressInCurrentPath = 1
-    print(f"progressInCurrentPath {progressInCurrentPath}")
-    print(pathIdx)
+    #print(f"progressInCurrentPath {progressInCurrentPath}")
+    #print(pathIdx)
     activeSegment = parsedPath[startSegmentIdx+pathIdx]
     position = activeSegment.point(progressInCurrentPath)
     tangent = activeSegment.derivative(progressInCurrentPath)
@@ -248,12 +250,19 @@ def placeTrain(lineName, currentStation, reverseDirection, progress, delayMin):
     xmin, xmax, ymin, ymax = delayIconPath.bbox()
     centerX = (xmin + xmax) / 2
     centerY = (ymin + ymax) / 2
+
+    transfMat  = parse_transform(delayIcon["@transform"])
+    #oldRotScale = f"matrix({transfMat[0,0]} {transfMat[1,0]} {transfMat[0,1]} {transfMat[1,1]} 0 0)"
     delayIconPath = translate(delayIconPath, -centerX-1J*centerY)
-    delayIconPath = rotate(delayIconPath, degs=180/math.pi*angle+90)
+    delayIconPath = scale(delayIconPath, (transfMat[0,1]**2 + transfMat[1,1]**2) ** 0.5)
+    delayIconPath = rotate(delayIconPath, degs=180/math.pi*angle+90,  origin=0)
     delayIconPath = translate(delayIconPath, position)
     delayIcon["@d"] = delayIconPath.d()
-    delayIcon['@transform'] = ""
+    delayIcon.pop("@transform", None)
+    delayIcon.pop("@inkscape:original-d", None)
     svgDict["svg"]["path"].append(delayIcon)
+    print(f"pos {position}")
+    print(f"station num {stationNr}")
 
 with open("Liniennetz_S-Bahn_Stuttgart.svg", "r") as inputSvg:
     svgFile = inputSvg.read()
@@ -264,20 +273,33 @@ for path in svgDict["svg"]["path"]:
         linesPathId[pathId]  = path
     if pathId in delayIconsId.keys():
         delayIconsId[pathId] = path
+for group in svgDict["svg"]["g"]:
+    for path in group["path"]:
+        pathId = path["@id"]
+        if pathId in linesPathId.keys():
+            linesPathId[pathId]  = path
+        if pathId in delayIconsId.keys():
+            delayIconsId[pathId] = path
+if any([item == None for item in delayIconsId.values()]):
+    print(delayIconsId.values())
+    raise ValueError("Delay icon not present in svg")
+
+if any([item == None for item in linesPathId.values()]):
+    raise ValueError("Line path not present in svg")
 
 #get data
-from crawlData import getCurrentRunningTrains
-runningTrainsDict = getCurrentRunningTrains()    
-print(runningTrainsDict)
-for trainRefAndOpData, trainData in runningTrainsDict.items():
-    journeyRef, operatingDay = trainRefAndOpData
-    backwardsJourney = (journeyRef.split(":")[2] == "R")
-    stopRefWithoutPlatform = ":".join(trainData["currentStopRef"].split(":")[:-2])
-    placeTrain(trainData["lineName"], 
-               stopRefWithoutPlatform, 
-               backwardsJourney, 
-               trainData["progressNextStop"], 
-               trainData["delay"])
-    
-with open("Sbahn_monitor.svg", "w") as outputSvg:
+import json
+with open("./currentRunningTrains.json") as inputfile, open("Sbahn_monitor.svg", "w") as outputSvg:
+    runningTrainsDict = json.loads(inputfile.read())
+    for trainRefAndOpData, trainData in runningTrainsDict.items():
+        print(f"{trainRefAndOpData}: {trainData}\n")
+        if trainData["lineName"] not in linesPathId.keys():
+            continue
+        backwardsJourney = (trainRefAndOpData.split(":")[3] == "R")
+        stopRefWithoutPlatform = ":".join(trainData["currentStopRef"].split(":")[:-2])
+        placeTrain(trainData["lineName"],
+                stopRefWithoutPlatform,
+                backwardsJourney,
+                trainData["progressNextStop"],
+                trainData["delay"])
     outputSvg.write(xmltodict.unparse(svgDict))
