@@ -178,9 +178,10 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
 
         #check which stop whas the last passed one
         delay = None
+        nextStopEstimArrival = None
         for stop in allStops[::-1]:
-            logger.info(allStops.index(stop))
-            logger.info(stop["CallAtStop"]["StopPointName"]["Text"])
+            stopNumber = allStops.index(stop)
+            stopPointName = stop["CallAtStop"]["StopPointName"]["Text"]
             departureDict = stop["CallAtStop"].get("ServiceDeparture")
             if departureDict is not None:
                 timetableDeparture = datetimeFromTriasStr(departureDict["TimetabledTime"])
@@ -196,17 +197,25 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
 
             #check if stop has been reached
             if (departureDict is not None) and (estimateDeparture is not None) and (estimateDeparture < currentTime):
+                #train has left station
                 delay = estimateDeparture - timetableDeparture
+                durationTravelingBetweenStops = currentTime - estimateDeparture
+                durationEstimatedBetweenStops = nextStopEstimArrival - estimateDeparture
+                progressToNextStop = durationTravelingBetweenStops / durationEstimatedBetweenStops
                 break
             elif (arrivalDict is not None) and (estimateArrival is not None) and (estimateArrival < currentTime):
+                #train is waiting at station
                 delay = estimateArrival - timetableArrival
+                progressToNextStop = 0
                 break
+            nextStopEstimArrival = estimateArrival
         else:
             error += 1
             print("probably error, no delay info")
 
 
         currentStopName = stop["CallAtStop"]["StopPointName"]["Text"]
+        currentStopRef = stop["CallAtStop"]["StopPointRef"]
         print(f"delay: {delay}, at station {currentStopName}")
         inAcqT += 1
         if serviceData.get("Cancelled") == "true":
@@ -229,11 +238,13 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
         if delay is not None:
             delay = delay.total_seconds()/60
         delaysForJourneys[(trainJourney, operatingDayRef)] = {
-            "delay": delay, 
-            "lineName": trainLineName, 
-            "incidentText": incidentText,
-            "currentStopName": currentStopName,
-            "destination": trainDestination,
+            "delay":            delay, 
+            "lineName":         trainLineName, 
+            "incidentText":     incidentText,
+            "currentStopName":  currentStopName,
+            "currentStopRef":   currentStopRef,
+            "destination":      trainDestination,
+            "progressNextStop": progressToNextStop,
         }
     print(f"Stats: e{toEarly}, l{toLate}, a{inAcqT}, err{error}")
     return delaysForJourneys
@@ -277,4 +288,4 @@ def getCurrentRunningTrains():
 
     print(delayPerLine)
     """
-print(getCurrentRunningTrains())
+#print(getCurrentRunningTrains())
