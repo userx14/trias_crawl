@@ -297,6 +297,8 @@ with open("./currentRunningTrains.json") as inputfile, open("Sbahn_monitor.svg",
             continue
         backwardsJourney = (trainRefAndOpData.split(":")[3] == "R")
         stopRefWithoutPlatform = ":".join(trainData["currentStopRef"].split(":")[:-2])
+        if stopRefWithoutPlatform == "de:08111:6115": #convert HBF oben to HBF tief
+            stopRefWithoutPlatform = "de:08111:6118"
         placeTrain(trainData["lineName"],
                 stopRefWithoutPlatform,
                 backwardsJourney,
