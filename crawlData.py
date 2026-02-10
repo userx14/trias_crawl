@@ -4,6 +4,7 @@ import requests
 from pathlib import Path
 import logging
 import sqlite3
+import json
 
 logger = logging.getLogger("")
 #logger.setLevel(logging.DEBUG)
@@ -104,7 +105,7 @@ def delaySeconds_from_serviceCall(serviceCallDict):
 def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults=5, opRef=""):
     #query should also match trains that have already passed through the station some time ago
     currentTime         = datetime.now().astimezone()
-    departureAtStopTime = triasStrFromDatetime(currentTime - timedelta(hours=1))
+    departureAtStopTime = triasStrFromDatetime(currentTime - timedelta(hours=2))
     operatorFilter      = {"Exclude": "false", "OperatorRef": "ddb:00"}
     ptModeFilter        = {"Exclude": "false", "PtMode": "urbanRail", "RailSubmode": "suburbanRailway"}
 
@@ -140,13 +141,16 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
     error = 0
 
     for stopEvent in serviceDelivery["DeliveryPayload"]["StopEventResponse"]["StopEventResult"]:
-        serviceData = stopEvent["StopEvent"]["Service"]
+        serviceData      = stopEvent["StopEvent"]["Service"]
         trainJourney     = serviceData["JourneyRef"]
         trainLineName    = serviceData["ServiceSection"]["PublishedLineName"]["Text"]
         trainOrigin      = serviceData["OriginText"]["Text"]
         trainDestination = serviceData["DestinationText"]["Text"]
         operatingDayRef  = datetimeFromTriasDateStr(serviceData["OperatingDayRef"])
         
+        if "S" not in trainLineName:
+            continue
+
         logger.info(f"{trainLineName} ({trainJourney}) from {trainOrigin} to {trainDestination}")
         
         allStops = []
@@ -244,6 +248,7 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
         delayMinutes         = None
         nextStopEstimArrival = None #for calculating progress in between stations
         trainCancelled       = False
+        progressToNextStop   = 0
         for stop in allStops[::-1]:
             thisCall        = stop["CallAtStop"]
             stopNumber      = allStops.index(stop)
@@ -269,8 +274,8 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
                     for serviceKeys in ["ServiceArrival", "ServiceDeparture"]:
                         tempDelay = delaySeconds_from_serviceCall(thisCall.get(serviceKeys))
                         if tempDelay is not None:
-                            lastDelay = tempDelay
-                            lastStationWithDelay = stopIdx
+                            lastDelay = timedelta(tempDelay)
+                            lastStationWithDelay = previousStopIdx
                 if tempDelay is None:
                     #no realtime info, use timetable data
                     if (departureDict is not None) and (timetableDeparture < currentTime):
@@ -281,10 +286,10 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
                         break
                 else:
                     #realtime info, continue delay for non serviced stops
-                    if (timetableDeparture+lastStationWithDelay < currentTime):
+                    if (timetableDeparture+lastDelay < currentTime):
                         trainCancelled = True
                         break
-                    elif (timetableArrival+lastStationWithDelay < currentTime):
+                    elif (timetableArrival+lastDelay < currentTime):
                         trainCancelled = True
                         break
             else:
@@ -305,7 +310,7 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
                 nextStopEstimArrival = estimateArrival
         else:
             error += 1
-            logger.error("probably error, no delay info")
+            logger.error(f"no delay info for {trainLineName}, {trainJourney}, {serviceData}")
             continue
 
 
@@ -410,7 +415,6 @@ sqlStopTableInit = """CREATE TABLE IF NOT EXISTS stops (
 );
 """
 
-#import json
 connection = sqlite3.connect('loggedJourney_2026.db')
 cursor = connection.cursor()
 cursor.execute(sqlJourneyTableInit)
@@ -452,7 +456,6 @@ connection.commit()
 cursor.close()
 connection.close()
 
-import json
 with open("./currentRunningTrains.json", "w") as outputfile:
     allLoggedJourneys, allLiveJourneys = getCurrentRunningTrains()
     
