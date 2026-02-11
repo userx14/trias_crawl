@@ -264,7 +264,7 @@ def placeTrain(lineName, currentStation, reverseDirection, progress, delayMin):
     print(f"pos {position}")
     print(f"station num {stationNr}")
 
-with open("Liniennetz_S-Bahn_Stuttgart.svg", "r") as inputSvg:
+with open("live_map_source.svg", "r") as inputSvg:
     svgFile = inputSvg.read()
 svgDict = xmltodict.parse(svgFile)
 for path in svgDict["svg"]["path"]:
