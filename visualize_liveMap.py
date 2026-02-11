@@ -182,7 +182,7 @@ linesStations = {
         ("de:08118:7000", "Ditzingen"),
         ("de:08111:2270", "Weilimdorf Bf"),
         ("de:08118:7603", "Korntal"),
-        ("de:08118:7000", "Zuffenhausen"),
+        ("de:08118:6465", "Zuffenhausen"),
         ("de:08111:6157", "Feuerbach"),
     ],
 }
