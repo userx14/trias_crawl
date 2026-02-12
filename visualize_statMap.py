@@ -186,7 +186,7 @@ linesStations = {
         ["de:08118:7000", "Ditzingen"],
         ["de:08111:2270", "Weilimdorf Bf"],
         ["de:08118:7603", "Korntal"],
-        ["de:08118:6465", "Zuffenhausen"],
+        ["de:08111:6465", "Zuffenhausen"],
         ["de:08111:6157", "Feuerbach"],
     ],
 }
@@ -202,7 +202,7 @@ def stopPointRefToStationIdx(stopPointRef, stationsOnThisLine):
     elif stopRefWithoutPlatform in stationNameList:
         return stationNameList.index(stopRefWithoutPlatform)
     else:
-        raise ValueError(f"station not found in this line {stopRefWithoutPlatform}")
+        raise ValueError(f"station not found in this line {stopRefWithoutPlatform}, line: {list(linesStations.keys())[list(linesStations.values()).index(stationsOnThisLine)]}")
 
 
 def make_colormap(stops, colors):
@@ -239,73 +239,141 @@ def colorTrainStation(lineName, stationRef, value, colormap):
         "@r": "8",
         "@fill": colormap(value),
     }
-    listOfCircles.append(circle)
+    return circle
 
-#data analysis
-analysisDay = datetime(2026,2,11,0,0,0)
-connection  = sqlite3.connect('loggedJourney_2026.db')
-cursor      = connection.cursor()
-analysisDay = analysisDay.astimezone(timezone.utc)
-analysisDay = analysisDay.replace(hour=0, minute=0, second=0, microsecond=0)
-analysisDay = int(analysisDay.timestamp())
-cursor.execute(f"SELECT * FROM journeys WHERE operatingDay=?;", (analysisDay,))
-journeys    = cursor.fetchall()
-keysJourney = list(map(lambda x: x[0], cursor.description))
-notServicedSectionDict = copy.deepcopy(linesStations)
-for lineStations in notServicedSectionDict.values():
-    for station in lineStations:
-        station.append([])
-for journeyData in journeys:
-    journeyRef      = journeyData[keysJourney.index("journeyRef")]
-    incidentMessage = journeyData[keysJourney.index("trainIncidentMessage")]
-    isCancelled     = journeyData[keysJourney.index("isCancelled")]
-    trainLineName   = journeyData[keysJourney.index("trainLineName")]
-    if "S" not in trainLineName:
-        continue
-    if isCancelled:
-        for stop in notServicedSectionDict[trainLineName]:
-            stop[2].append(1)
-    #get all stops
-    cursor.execute(f"SELECT * FROM stops WHERE operatingDay=? AND journeyRef=? ORDER BY stopIndex ASC;", (analysisDay,journeyRef,))
-    stops = cursor.fetchall()
-    keysStop = list(map(lambda x: x[0], cursor.description))
-    isReversed = (journeyRef.split(":")[3]) == "R"
-    stationsOnThisLine = linesStations[trainLineName]
-    for stop in stops:
-        isNotServiced = stop[keysStop.index("notServiced")]
-        stopPointRef  = stop[keysStop.index("stopPointRef")]
-        stationNr     = stopPointRefToStationIdx(stopPointRef, stationsOnThisLine)
-        if isNotServiced:
+def analyze_data(callbackAnalysis, analysisDayStart, analysisDayEnd, databasePath="loggedJourney_2026.db"):
+    analysisDayStart = analysisDayStart.astimezone(timezone.utc)
+    analysisDayEnd   = analysisDayEnd.astimezone(timezone.utc)
+    analysisDayStart = analysisDayStart.replace(hour=0, minute=0, second=0, microsecond=0)
+    analysisDayEnd   = analysisDayEnd.replace(hour=0, minute=0, second=0, microsecond=0)
+    analysisDayStart = int(analysisDayStart.timestamp())
+    analysisDayEnd   = int(analysisDayEnd.timestamp())
+    connection       = sqlite3.connect(databasePath)
+    cursor           = connection.cursor()
+    cursor.execute(f"SELECT * FROM journeys WHERE ?<=operatingDay AND operatingDay<=?;", (analysisDayStart,analysisDayEnd))
+    journeys    = cursor.fetchall()
+    keysJourney = list(map(lambda x: x[0], cursor.description))
+    for journeyData in journeys:
+        journeyDict = dict()
+        for keyIdx, key in enumerate(keysJourney):
+            journeyDict[key] = journeyData[keyIdx]
+        if "S" not in journeyDict["trainLineName"]:
+            continue
+        journeyRef      = journeyDict["journeyRef"]
+        operatingDay    = journeyDict["operatingDay"]
+
+        #get all stops
+        cursor.execute(f"SELECT * FROM stops WHERE operatingDay=? AND journeyRef=? ORDER BY stopIndex ASC;", (operatingDay,journeyRef,))
+        stops = cursor.fetchall()
+        keysStop = list(map(lambda x: x[0], cursor.description))
+        for stopData in stops:
+            stopDict = dict()
+            for keyIdx, key in enumerate(keysStop):
+                stopDict[key] = stopData[keyIdx]
+            callbackAnalysis(journeyDict, stopDict)
+
+
+#data visualization delay
+def visualize_delay():
+    delaySectionDict = copy.deepcopy(linesStations)
+    for lineStations in delaySectionDict.values():
+        for station in lineStations:
+            station.append([])
+    def delayAnalysisFunction(journeyDict, stopDict):
+        trainLineName = journeyDict["trainLineName"]
+        if "S" not in trainLineName:
+            return
+        if journeyDict["isCancelled"]:
+            return
+
+        isReversed = (journeyDict["journeyRef"].split(":")[3]) == "R"
+
+
+        #incidentMessage = journeyDict["trainIncidentMessage"]
+        stationsOnThisLine = linesStations[trainLineName]
+        if stopDict["departureEstimate"] is not None:
+            delay = (stopDict["departureEstimate"] - stopDict["departureTimetable"])/60
+        elif stopDict["arrivalEstimate"] is not None:
+            delay = (stopDict["arrivalEstimate"] - stopDict["arrivalTimetable"])/60
+        else:
+            return
+        stationNr = stopPointRefToStationIdx(stopDict["stopPointRef"], stationsOnThisLine)
+        delaySectionDict[trainLineName][stationNr][2].append(delay)
+    analyze_data(delayAnalysisFunction, datetime(2026,2,11,0,0,0), datetime(2026,2,15,0,0,0))
+
+    with open("stat_map_delay_source.svg", "r") as inputSvg:
+        svgFile = inputSvg.read()
+    svgDict = xmltodict.parse(svgFile)
+    for path in svgDict["svg"]["path"]:
+        pathId = path["@id"]
+        if pathId in linesPathId.keys():
+            linesPathId[pathId]  = path
+    for group in svgDict["svg"]["g"]:
+        for path in group["path"]:
+            pathId = path["@id"]
+            if pathId in linesPathId.keys():
+                linesPathId[pathId]  = path
+    if any([item == None for item in linesPathId.values()]):
+        raise ValueError("Line path not present in svg")
+    cmap = make_colormap([0.0, 5.0, 10.0], ["#12dc01", "#e0ea00", "#ff0e0e"])
+    listOfCircles = []
+    for lineName, lineStations in delaySectionDict.items():
+        for stationIdx, station in enumerate(lineStations):
+            if len(station[2]) != 0:
+                ratioNotServiced = sum(station[2])/len(station[2])
+                lineStations[stationIdx][2] = ratioNotServiced
+            else:
+                lineStations[stationIdx][2] = 0
+            listOfCircles.append(colorTrainStation(lineName, lineStations[stationIdx][0], lineStations[stationIdx][2], cmap))
+
+    svgDict["svg"]["circle"] = listOfCircles
+    with open("stat_map_delay.svg", "w") as outputSvg:
+        outputSvg.write(xmltodict.unparse(svgDict))
+
+def visualize_notServiced():
+    notServicedSectionDict = copy.deepcopy(linesStations)
+    for lineStations in notServicedSectionDict.values():
+        for station in lineStations:
+            station.append([])
+    def notServicedAnalysisFunc(journeyDict, stopDict):
+        trainLineName = journeyDict["trainLineName"]
+        stationsOnThisLine = linesStations[trainLineName]
+        stationNr     = stopPointRefToStationIdx(stopDict["stopPointRef"], stationsOnThisLine)
+        if stopDict["notServiced"]:
             notServicedSectionDict[trainLineName][stationNr][2].append(1)
         else:
             notServicedSectionDict[trainLineName][stationNr][2].append(0)
 
-#data visualization
-with open("stat_map_notServiced_source.svg", "r") as inputSvg:
-    svgFile = inputSvg.read()
-svgDict = xmltodict.parse(svgFile)
-for path in svgDict["svg"]["path"]:
-    pathId = path["@id"]
-    if pathId in linesPathId.keys():
-        linesPathId[pathId]  = path
-for group in svgDict["svg"]["g"]:
-    for path in group["path"]:
+    analyze_data(notServicedAnalysisFunc, datetime(2026,2,11,0,0,0), datetime(2026,2,15,0,0,0))
+
+    with open("stat_map_notServiced_source.svg", "r") as inputSvg:
+        svgFile = inputSvg.read()
+    svgDict = xmltodict.parse(svgFile)
+    for path in svgDict["svg"]["path"]:
         pathId = path["@id"]
         if pathId in linesPathId.keys():
             linesPathId[pathId]  = path
-if any([item == None for item in linesPathId.values()]):
-    raise ValueError("Line path not present in svg")
-cmap = make_colormap([0.0, 0.1, 0.2], ["12dc01", "e0ea00", "ff0e0e"])
-listOfCircles = []
-for lineName, lineStations in notServicedSectionDict.items():
-    for stationIdx, station in enumerate(lineStations):
-        if len(station[2]) != 0:
-            ratioNotServiced = sum(station[2])/len(station[2])
-            lineStations[stationIdx][2] = ratioNotServiced
-        else:
-            lineStations[stationIdx][2] = 0
-        colorTrainStation(lineName, lineStations[stationIdx][0], lineStations[stationIdx][2], cmap)
+    for group in svgDict["svg"]["g"]:
+        for path in group["path"]:
+            pathId = path["@id"]
+            if pathId in linesPathId.keys():
+                linesPathId[pathId]  = path
+    if any([item == None for item in linesPathId.values()]):
+        raise ValueError("Line path not present in svg")
+    cmap = make_colormap([0.0, 0.1, 0.2], ["#12dc01", "#e0ea00", "#ff0e0e"])
+    listOfCircles = []
+    for lineName, lineStations in notServicedSectionDict.items():
+        for stationIdx, station in enumerate(lineStations):
+            if len(station[2]) != 0:
+                ratioNotServiced = sum(station[2])/len(station[2])
+                lineStations[stationIdx][2] = ratioNotServiced
+            else:
+                lineStations[stationIdx][2] = 0
+            listOfCircles.append(colorTrainStation(lineName, lineStations[stationIdx][0], lineStations[stationIdx][2], cmap))
 
-svgDict["svg"]["circle"] = listOfCircles
-with open("stat_map_notServiced.svg", "w") as outputSvg:
-    outputSvg.write(xmltodict.unparse(svgDict))
+    svgDict["svg"]["circle"] = listOfCircles
+    with open("stat_map_notServiced.svg", "w") as outputSvg:
+        outputSvg.write(xmltodict.unparse(svgDict))
+
+visualize_delay()
+visualize_notServiced()

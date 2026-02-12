@@ -23,8 +23,8 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="1.2081971"
-     inkscape:cx="581.85872"
-     inkscape:cy="580.6172"
+     inkscape:cx="1961.6005"
+     inkscape:cy="63.317484"
      inkscape:window-width="1920"
      inkscape:window-height="1008"
      inkscape:window-x="0"
@@ -1837,7 +1837,7 @@
        id="tspan1"
        x="1136.1797"
        y="129.35378"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:74.6667px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';fill:#000000;fill-opacity:1">Durchschnittliche Verspätung and Halt - S-Bahn Stuttgart</tspan></text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:74.6667px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';fill:#000000;fill-opacity:1">Durchschnittliche Verspätung am Halt - S-Bahn Stuttgart</tspan></text>
   <path
      style="fill:#000000;fill-opacity:1;stroke:url(#linearGradient2);stroke-width:33.8103;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
      d="M 138.1736,462.33524 H 432.42932"
@@ -1876,12 +1876,12 @@
   <text
      xml:space="preserve"
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:37.3333px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-     x="403.78754"
+     x="384.75092"
      y="396.78296"
      id="text3-9"><tspan
        sodipodi:role="line"
        id="tspan3-2"
-       x="403.78754"
+       x="384.75092"
        y="396.78296"
-       style="font-size:37.3333px;stroke:none">6 min</tspan></text>
+       style="font-size:37.3333px;stroke:none">10 min</tspan></text>
 </svg>
