@@ -457,20 +457,15 @@ cursor.close()
 connection.close()
 
 with open("./currentRunningTrains.json", "w") as outputfile:
-    allLoggedJourneys, allLiveJourneys = getCurrentRunningTrains()
-    
     outputfile.write(json.dumps(allLiveJourneys, indent=4))
-"""
-
+    
+with open("./stats.json", "a") as outputfile:
     delayPerLine = {}
-    for journeyRefAndDay, delayData in allTrainsDict.items():
-        print(f"{journeyRefAndDay}: {delayData}")
+    for journeyRefAndDay, delayData in allLiveJourneys.items():
         delayLineName = delayData['lineName']
         delayInMin = delayData['delay']
         if delayLineName in delayPerLine.keys():
             delayPerLine[delayLineName].append(delayInMin)
         else:
             delayPerLine[delayLineName] = [delayInMin]
-
-    print(delayPerLine)
-    """
+    outputfile.write(json.dumps({str(datetime.now()): delayPerLine}, indent=4))

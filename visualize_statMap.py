@@ -322,9 +322,8 @@ def visualize_delay():
             if len(station[2]) != 0:
                 ratioNotServiced = sum(station[2])/len(station[2])
                 lineStations[stationIdx][2] = ratioNotServiced
-            else:
-                lineStations[stationIdx][2] = 0
-            listOfCircles.append(colorTrainStation(lineName, lineStations[stationIdx][0], lineStations[stationIdx][2], cmap))
+                listOfCircles.append(colorTrainStation(lineName, lineStations[stationIdx][0], lineStations[stationIdx][2], cmap))
+            
 
     svgDict["svg"]["circle"] = listOfCircles
     with open("stat_map_delay.svg", "w") as outputSvg:
@@ -367,9 +366,7 @@ def visualize_notServiced():
             if len(station[2]) != 0:
                 ratioNotServiced = sum(station[2])/len(station[2])
                 lineStations[stationIdx][2] = ratioNotServiced
-            else:
-                lineStations[stationIdx][2] = 0
-            listOfCircles.append(colorTrainStation(lineName, lineStations[stationIdx][0], lineStations[stationIdx][2], cmap))
+                listOfCircles.append(colorTrainStation(lineName, lineStations[stationIdx][0], lineStations[stationIdx][2], cmap))
 
     svgDict["svg"]["circle"] = listOfCircles
     with open("stat_map_notServiced.svg", "w") as outputSvg:
