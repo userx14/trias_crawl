@@ -22,9 +22,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="1.2081971"
-     inkscape:cx="1961.6005"
-     inkscape:cy="63.317484"
+     inkscape:zoom="0.36363832"
+     inkscape:cx="1632.1162"
+     inkscape:cy="578.87189"
      inkscape:window-width="1920"
      inkscape:window-height="1008"
      inkscape:window-x="0"
@@ -1832,12 +1832,12 @@
      style="font-stretch:condensed;font-size:74.6667px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Condensed';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#ffffff;stroke-width:3.8;stroke-linecap:round;stroke-linejoin:round"
      x="1136.1797"
      y="129.35378"
-     id="text1"><tspan
+     id="title"><tspan
        sodipodi:role="line"
        id="tspan1"
        x="1136.1797"
        y="129.35378"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:74.6667px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';fill:#000000;fill-opacity:1">Durchschnittliche Verspätung am Halt - S-Bahn Stuttgart</tspan></text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:74.6667px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';fill:#000000;fill-opacity:1">&lt;replaced&gt;</tspan></text>
   <path
      style="fill:#000000;fill-opacity:1;stroke:url(#linearGradient2);stroke-width:33.8103;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
      d="M 138.1736,462.33524 H 432.42932"

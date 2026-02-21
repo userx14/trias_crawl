@@ -274,7 +274,7 @@ def analyze_data(callbackAnalysis, analysisDayStart, analysisDayEnd, databasePat
 
 
 #data visualization delay
-def visualize_delay():
+def visualize_delay(analysisStartDay, analysisEndDay):
     delaySectionDict = copy.deepcopy(linesStations)
     for lineStations in delaySectionDict.values():
         for station in lineStations:
@@ -285,10 +285,7 @@ def visualize_delay():
             return
         if journeyDict["isCancelled"]:
             return
-
         isReversed = (journeyDict["journeyRef"].split(":")[3]) == "R"
-
-
         #incidentMessage = journeyDict["trainIncidentMessage"]
         stationsOnThisLine = linesStations[trainLineName]
         if stopDict["departureEstimate"] is not None:
@@ -299,7 +296,7 @@ def visualize_delay():
             return
         stationNr = stopPointRefToStationIdx(stopDict["stopPointRef"], stationsOnThisLine)
         delaySectionDict[trainLineName][stationNr][2].append(delay)
-    analyze_data(delayAnalysisFunction, datetime(2026,2,11,0,0,0), datetime(2026,2,15,0,0,0))
+    analyze_data(delayAnalysisFunction, analysisStartDay, analysisEndDay)
 
     with open("stat_map_delay_source.svg", "r") as inputSvg:
         svgFile = inputSvg.read()
@@ -326,10 +323,15 @@ def visualize_delay():
             
 
     svgDict["svg"]["circle"] = listOfCircles
+    for textElement in svgDict["svg"]["text"]:
+        if textElement["@id"] == "title":
+            textElement["tspan"]["#text"] = f"Durchschnittliche Verspätung am Halt, vom {analysisStartDay.strftime('%d.%m.%Y')} bis {analysisEndDay.strftime('%d.%m.%Y')}"
+
+
     with open("stat_map_delay.svg", "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict))
 
-def visualize_notServiced():
+def visualize_notServiced(analysisStartDay, analysisEndDay):
     notServicedSectionDict = copy.deepcopy(linesStations)
     for lineStations in notServicedSectionDict.values():
         for station in lineStations:
@@ -343,7 +345,7 @@ def visualize_notServiced():
         else:
             notServicedSectionDict[trainLineName][stationNr][2].append(0)
 
-    analyze_data(notServicedAnalysisFunc, datetime(2026,2,11,0,0,0), datetime(2026,2,15,0,0,0))
+    analyze_data(notServicedAnalysisFunc, analysisStartDay, analysisEndDay)
 
     with open("stat_map_notServiced_source.svg", "r") as inputSvg:
         svgFile = inputSvg.read()
@@ -367,10 +369,13 @@ def visualize_notServiced():
                 ratioNotServiced = sum(station[2])/len(station[2])
                 lineStations[stationIdx][2] = ratioNotServiced
                 listOfCircles.append(colorTrainStation(lineName, lineStations[stationIdx][0], lineStations[stationIdx][2], cmap))
-
     svgDict["svg"]["circle"] = listOfCircles
+    for textElement in svgDict["svg"]["text"]:
+        if textElement["@id"] == "title":
+            textElement["tspan"]["#text"] = f"Anteil ungeplant ausgefallener Halte, vom {analysisStartDay.strftime('%d.%m.%Y')} bis {analysisEndDay.strftime('%d.%m.%Y')}"
+
     with open("stat_map_notServiced.svg", "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict))
 
-visualize_delay()
-visualize_notServiced()
+visualize_delay(datetime(2026,2,11,0,0,0), datetime(2026,2,15,0,0,0))
+visualize_notServiced(datetime(2026,2,11,0,0,0), datetime(2026,2,15,0,0,0))

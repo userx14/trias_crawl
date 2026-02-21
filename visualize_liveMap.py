@@ -3,6 +3,7 @@ from svgpathtools import CubicBezier, parse_path
 from svgpathtools.parser import parse_transform
 from svgpathtools.path import translate, rotate, scale
 import math
+from datetime import datetime
 
 linesPathId  = {
     "S1":  None, 
@@ -200,12 +201,12 @@ def placeTrain(lineName, currentStation, reverseDirection, progress, delayMin):
     linePath = linesPathId[lineName]
     parsedPath = parse_path(linePath["@d"])
     if reverseDirection:
-        print("revDir")
+        #print("revDir")
         parsedPath = parsedPath.reversed()
         stationIdList   = [station[0] for station in lineStations[::-1]]
         stationNameList = [station[1] for station in lineStations[::-1]]
     else:
-        print("normDir")
+        #print("normDir")
         stationIdList   = [station[0] for station in lineStations]
         stationNameList = [station[1] for station in lineStations]
     if currentStation in stationIdList:
@@ -261,8 +262,8 @@ def placeTrain(lineName, currentStation, reverseDirection, progress, delayMin):
     delayIcon.pop("@transform", None)
     delayIcon.pop("@inkscape:original-d", None)
     svgDict["svg"]["path"].append(delayIcon)
-    print(f"pos {position}")
-    print(f"station num {stationNr}")
+    #print(f"pos {position}")
+    #print(f"station num {stationNr}")
 
 with open("live_map_source.svg", "r") as inputSvg:
     svgFile = inputSvg.read()
@@ -286,13 +287,18 @@ if any([item == None for item in delayIconsId.values()]):
 
 if any([item == None for item in linesPathId.values()]):
     raise ValueError("Line path not present in svg")
-
+if isinstance(svgDict["svg"]["text"], list):
+    for textElement in svgDict["svg"]["text"]:
+        if textElement["@id"] == "title":
+            textElement["tspan"]["#text"] = f"Livekarte, aktualisiert {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
+else:
+    svgDict["svg"]["text"]["tspan"]["#text"] = f"Livekarte, aktualisiert {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
 #get data
 import json
 with open("./currentRunningTrains.json") as inputfile, open("live_map.svg", "w") as outputSvg:
     runningTrainsDict = json.loads(inputfile.read())
     for trainRefAndOpData, trainData in runningTrainsDict.items():
-        print(f"{trainRefAndOpData}: {trainData}\n")
+        #print(f"{trainRefAndOpData}: {trainData}\n")
         if trainData["lineName"] not in linesPathId.keys():
             continue
         if trainData["cancelled"]:
