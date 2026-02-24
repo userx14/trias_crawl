@@ -6,189 +6,25 @@ from svgpathtools.path import translate, rotate, scale
 import math
 import copy
 import sqlite3
+import logging
+from pathlib import Path
+from lineStations import linesStations
 
+base_dir               = Path(__file__).parent
+yearInt                = datetime.now().year
+db_data_source         = base_dir/f'loggedJourney_{yearInt}.db'
+svg_delay_in_dir       = base_dir/"stat_map_delay_source.svg"
+svg_notServiced_in_dir = base_dir/"stat_map_notServiced_source.svg"
 
 linesPathId  = {
-    "S1":  None, 
-    "S2":  None, 
-    "S3":  None, 
-    "S4":  None, 
-    "S5":  None, 
-    "S6":  None, 
+    "S1":  None,
+    "S2":  None,
+    "S3":  None,
+    "S4":  None,
+    "S5":  None,
+    "S6":  None,
     "S60": None,
     "S62": None,
-}
-
-linesStations = {
-    "S1": [
-        ["de:08115:4512", "Herrenberg"],
-        ["de:08115:5775", "Nufringen"],
-        ["de:08115:5774", "Gärtringen"],
-        ["de:08115:5773", "Ehningen"],
-        ["de:08115:7115", "Hulb"],
-        ["de:08115:7100", "Böblingen"],
-        ["de:08115:3212", "Goldberg"],
-        ["de:08111:6001", "Rohr"],
-        ["de:08111:6002", "Vaihingen"],
-        ["de:08111:6027", "Österfeld"],
-        ["de:08111:6008", "Universität"],
-        ["de:08111:6052", "Schwabstraße"],
-        ["de:08111:6221", "Feuersee"],
-        ["de:08111:6056", "Stadtmitte"],
-        ["de:08111:6118", "Stuttgart Hauptbahnhof [tief]"],
-        ["de:08111:6333", "Bad Cannstatt"],
-        ["de:08111:6080", "Neckarpark"],
-        ["de:08111:6085", "Untertürkheim"],
-        ["de:08111:6091", "Obertürkheim"],
-        ["de:08116:1801", "Mettingen"],
-        ["de:08116:7800", "Esslingen [N]"],
-        ["de:08116:1802", "Oberesslingen"],
-        ["de:08116:1803", "Zell"],
-        ["de:08116:1800", "Altbach"],
-        ["de:08116:7802", "Plochingen"],
-        ["de:08116:4241", "Wernau [N]"],
-        ["de:08116:4257", "Wendlingen [N]"],
-        ["de:08116:4345", "Ötlingen"],
-        ["de:08116:4211", "Kirchheim [T]"],
-    ],
-    "S2": [
-        ["de:08119:7703", "Schorndorf"],
-        ["de:08119:1704", "Weiler [R]"],
-        ["de:08119:1705", "Winterbach"],
-        ["de:08119:1702", "Geradstetten"],
-        ["de:08119:1703", "Grunbach"],
-        ["de:08119:3711", "Beutelsbach"],
-        ["de:08119:7704", "Endersbach"],
-        ["de:08119:1701", "Stetten-Beinstein"],
-        ["de:08119:7701", "Rommelshausen"],
-        ["de:08119:7604", "Waiblingen"],
-        ["de:08119:6500", "Fellbach"],
-        ["de:08111:1300", "Sommerrain"],
-        ["de:08111:34",   "Nürnberger Straße"],
-        ["de:08111:6333", "Bad Cannstatt"],
-        ["de:08111:6118", "Stuttgart Hauptbahnhof [tief]"], 
-        ["de:08111:6056", "Stadtmitte"], 
-        ["de:08111:6221", "Feuersee"], 
-        ["de:08111:6052", "Schwabstraße"],
-        ["de:08111:6008", "Universität"],
-        ["de:08111:6027", "Österfeld"],
-        ["de:08111:6002", "Vaihingen"],
-        ["de:08111:6001", "Rohr"],
-        ["de:08116:2105", "Oberaichen"],
-        ["de:08116:175",  "Leinfelden"],
-        ["de:08116:7003", "Echterdingen"],
-        ["de:08116:2103", "Flughafen/Messe"],
-        ["de:08116:1905", "Filderstadt"],
-    ], 
-    "S3": [
-        ["de:08119:7600", "Backnang"],
-        ["de:08119:7601", "Maubach"],
-        ["de:08119:1601", "Nellmersbach"],
-        ["de:08119:7605", "Winnenden"],
-        ["de:08119:1603", "Schwaikheim"],
-        ["de:08119:1602", "Neustadt-Hohenacker"],
-        ["de:08119:7604", "Waiblingen"],
-        ["de:08119:6500", "Fellbach"],
-        ["de:08111:1300", "Sommerrain"],
-        ["de:08111:34",   "Nürnberger Straße"],
-        ["de:08111:6333", "Bad Cannstatt"],
-        ["de:08111:6118", "Stuttgart Hauptbahnhof [tief]"], 
-        ["de:08111:6056", "Stadtmitte"], 
-        ["de:08111:6221", "Feuersee"], 
-        ["de:08111:6052", "Schwabstraße"],
-        ["de:08111:6008", "Universität"],
-        ["de:08111:6027", "Österfeld"],
-        ["de:08111:6002", "Vaihingen"],
-        ["de:08111:6001", "Rohr"],
-        ["de:08116:2105", "Oberaichen"],
-        ["de:08116:175",  "Leinfelden"],
-        ["de:08116:7003", "Echterdingen"],
-        ["de:08116:2103", "Flughafen/Messe"],
-    ], 
-    "S4": [
-        ["de:08119:7600", "Backnang"], 
-        ["de:08119:7500", "Burgstall [M]"], 
-        ["de:08119:7502", "Kirchberg [M]"], 
-        ["de:08118:3514", "Erdmannhausen"], 
-        ["de:08118:7503", "Marbach [N]"], 
-        ["de:08118:1500", "Benningen [N]"], 
-        ["de:08118:1503", "Freiberg [N]"], 
-        ["de:08118:7403", "Favoritepark"], 
-        ["de:08118:7402", "Ludwigsburg"], 
-        ["de:08118:1402", "Kornwestheim"], 
-        ["de:08111:6465", "Zuffenhausen"], 
-        ["de:08111:6157", "Feuerbach"], 
-        ["de:08111:6295", "Nordbahnhof"], 
-        ["de:08111:6118", "Stuttgart Hauptbahnhof [tief]"], 
-        ["de:08111:6056", "Stadtmitte"], 
-        ["de:08111:6221", "Feuersee"], 
-        ["de:08111:6052", "Schwabstraße"],
-    ],
-    "S5":  [
-        ["de:08118:1400", "Bietigheim"], 
-        ["de:08118:7404", "Tamm"], 
-        ["de:08118:7400", "Asperg"], 
-        ["de:08118:7402", "Ludwigsburg"], 
-        ["de:08118:1402", "Kornwestheim"], 
-        ["de:08111:6465", "Zuffenhausen"], 
-        ["de:08111:6157", "Feuerbach"], 
-        ["de:08111:6295", "Nordbahnhof"], 
-        ["de:08111:6118", "Stuttgart Hauptbahnhof [tief]"], 
-        ["de:08111:6056", "Stadtmitte"], 
-        ["de:08111:6221", "Feuersee"], 
-        ["de:08111:6052", "Schwabstraße"],
-    ],
-    "S6":  [
-        ["de:08115:1303", "Weil der Stadt"],
-        ["de:08115:1301", "Malmsheim"],
-        ["de:08115:7302", "Renningen"],
-        ["de:08115:1302", "Rutesheim"],
-        ["de:08115:7301", "Leonberg"],
-        ["de:08115:1003", "Höfingen"],
-        ["de:08118:7000", "Ditzingen"],
-        ["de:08111:2270", "Weilimdorf Bf"],
-        ["de:08118:7603", "Korntal"],
-        ["de:08111:1403", "Neuwirtsh. [Porschep.]"],
-        ["de:08111:6465", "Zuffenhausen"],
-        ["de:08111:6157", "Feuerbach"],
-        ["de:08111:6295", "Nordbahnhof"],
-        ["de:08111:6118", "Stuttgart Hauptbahnhof [tief]"],
-        ["de:08111:6056", "Stadtmitte"],
-        ["de:08111:6221", "Feuersee"],
-        ["de:08111:6052", "Schwabstraße"],
-    ], 
-    "S60": [
-        ["de:08115:7100", "Böblingen"],
-        ["de:08115:3201", "Sindelfingen"],
-        ["de:08115:3198", "Maichingen"],
-        ["de:08115:3197", "Maichingen Nord"],
-        ["de:08115:3196", "Magstadt"],
-        ["de:08115:3195", "Renningen Süd"],
-        ["de:08115:7302", "Renningen"],
-        ["de:08115:1302", "Rutesheim"],
-        ["de:08115:7301", "Leonberg"],
-        ["de:08115:1003", "Höfingen"],
-        ["de:08118:7000", "Ditzingen"],
-        ["de:08111:2270", "Weilimdorf Bf"],
-        ["de:08118:7603", "Korntal"],
-        ["de:08111:1403", "Neuwirtsh. [Porschep.]"],
-        ["de:08111:6465", "Zuffenhausen"],
-        ["de:08111:6157", "Feuerbach"],
-        ["de:08111:6295", "Nordbahnhof"],
-        ["de:08111:6118", "Stuttgart Hauptbahnhof [tief]"],
-        ["de:08111:6056", "Stadtmitte"],
-        ["de:08111:6221", "Feuersee"],
-        ["de:08111:6052", "Schwabstraße"],
-    ],
-    "S62": [
-        ["de:08115:1303", "Weil der Stadt"],
-        ["de:08115:7301", "Leonberg"],
-        ["de:08118:7000", "Ditzingen"],
-        ["de:08111:2270", "Weilimdorf Bf"],
-        ["de:08118:7603", "Korntal"],
-        ["de:08111:6465", "Zuffenhausen"],
-        ["de:08111:6157", "Feuerbach"],
-    ],
 }
 
 def stopPointRefToStationIdx(stopPointRef, stationsOnThisLine):
@@ -202,7 +38,8 @@ def stopPointRefToStationIdx(stopPointRef, stationsOnThisLine):
     elif stopRefWithoutPlatform in stationNameList:
         return stationNameList.index(stopRefWithoutPlatform)
     else:
-        raise ValueError(f"station not found in this line {stopRefWithoutPlatform}, line: {list(linesStations.keys())[list(linesStations.values()).index(stationsOnThisLine)]}")
+        logging.debug(f"station not found in this line {stopRefWithoutPlatform}, line: {list(linesStations.keys())[list(linesStations.values()).index(stationsOnThisLine)]}")
+        return None
 
 
 def make_colormap(stops, colors):
@@ -220,7 +57,6 @@ def make_colormap(stops, colors):
                     break
         return "#{:02x}{:02x}{:02x}".format(*rgb)
     return cmap
-
 
 def colorTrainStation(lineName, stationRef, value, colormap):
     lineStations  = linesStations[lineName]
@@ -241,14 +77,14 @@ def colorTrainStation(lineName, stationRef, value, colormap):
     }
     return circle
 
-def analyze_data(callbackAnalysis, analysisDayStart, analysisDayEnd, databasePath="loggedJourney_2026.db"):
+def analyze_data(callbackAnalysis, analysisDayStart, analysisDayEnd):
     analysisDayStart = analysisDayStart.astimezone(timezone.utc)
     analysisDayEnd   = analysisDayEnd.astimezone(timezone.utc)
     analysisDayStart = analysisDayStart.replace(hour=0, minute=0, second=0, microsecond=0)
     analysisDayEnd   = analysisDayEnd.replace(hour=0, minute=0, second=0, microsecond=0)
     analysisDayStart = int(analysisDayStart.timestamp())
     analysisDayEnd   = int(analysisDayEnd.timestamp())
-    connection       = sqlite3.connect(databasePath)
+    connection       = sqlite3.connect(db_data_source)
     cursor           = connection.cursor()
     cursor.execute(f"SELECT * FROM journeys WHERE ?<=operatingDay AND operatingDay<=?;", (analysisDayStart,analysisDayEnd))
     journeys    = cursor.fetchall()
@@ -274,7 +110,7 @@ def analyze_data(callbackAnalysis, analysisDayStart, analysisDayEnd, databasePat
 
 
 #data visualization delay
-def visualize_delay(analysisStartDay, analysisEndDay):
+def update_stat_delay_map(analysisStartDay, analysisEndDay, out_dir):
     delaySectionDict = copy.deepcopy(linesStations)
     for lineStations in delaySectionDict.values():
         for station in lineStations:
@@ -282,6 +118,9 @@ def visualize_delay(analysisStartDay, analysisEndDay):
     def delayAnalysisFunction(journeyDict, stopDict):
         trainLineName = journeyDict["trainLineName"]
         if "S" not in trainLineName:
+            return
+        if trainLineName not in linesStations.keys():
+            logging.debug(f"trainLineName {trainLineName} unknown")
             return
         if journeyDict["isCancelled"]:
             return
@@ -295,10 +134,11 @@ def visualize_delay(analysisStartDay, analysisEndDay):
         else:
             return
         stationNr = stopPointRefToStationIdx(stopDict["stopPointRef"], stationsOnThisLine)
+        if stationNr is None:
+            return
         delaySectionDict[trainLineName][stationNr][2].append(delay)
     analyze_data(delayAnalysisFunction, analysisStartDay, analysisEndDay)
-
-    with open("stat_map_delay_source.svg", "r") as inputSvg:
+    with open(svg_delay_in_dir, "r") as inputSvg:
         svgFile = inputSvg.read()
     svgDict = xmltodict.parse(svgFile)
     for path in svgDict["svg"]["path"]:
@@ -320,26 +160,27 @@ def visualize_delay(analysisStartDay, analysisEndDay):
                 ratioNotServiced = sum(station[2])/len(station[2])
                 lineStations[stationIdx][2] = ratioNotServiced
                 listOfCircles.append(colorTrainStation(lineName, lineStations[stationIdx][0], lineStations[stationIdx][2], cmap))
-            
-
     svgDict["svg"]["circle"] = listOfCircles
     for textElement in svgDict["svg"]["text"]:
         if textElement["@id"] == "title":
             textElement["tspan"]["#text"] = f"Durchschnittliche Verspätung am Halt, vom {analysisStartDay.strftime('%d.%m.%Y')} bis {analysisEndDay.strftime('%d.%m.%Y')}"
-
-
-    with open("stat_map_delay.svg", "w") as outputSvg:
+    with open(out_dir/"stat_map_delay.svg", "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict))
 
-def visualize_notServiced(analysisStartDay, analysisEndDay):
+def update_stat_notServiced_map(analysisStartDay, analysisEndDay, out_dir):
     notServicedSectionDict = copy.deepcopy(linesStations)
     for lineStations in notServicedSectionDict.values():
         for station in lineStations:
             station.append([])
     def notServicedAnalysisFunc(journeyDict, stopDict):
         trainLineName = journeyDict["trainLineName"]
+        if trainLineName not in linesStations.keys():
+            logging.debug(f"trainLineName {trainLineName} not found")
+            return
         stationsOnThisLine = linesStations[trainLineName]
         stationNr     = stopPointRefToStationIdx(stopDict["stopPointRef"], stationsOnThisLine)
+        if stationNr is None:
+            return
         if stopDict["notServiced"]:
             notServicedSectionDict[trainLineName][stationNr][2].append(1)
         else:
@@ -347,7 +188,7 @@ def visualize_notServiced(analysisStartDay, analysisEndDay):
 
     analyze_data(notServicedAnalysisFunc, analysisStartDay, analysisEndDay)
 
-    with open("stat_map_notServiced_source.svg", "r") as inputSvg:
+    with open(svg_notServiced_in_dir, "r") as inputSvg:
         svgFile = inputSvg.read()
     svgDict = xmltodict.parse(svgFile)
     for path in svgDict["svg"]["path"]:
@@ -374,8 +215,8 @@ def visualize_notServiced(analysisStartDay, analysisEndDay):
         if textElement["@id"] == "title":
             textElement["tspan"]["#text"] = f"Anteil ungeplant ausgefallener Halte, vom {analysisStartDay.strftime('%d.%m.%Y')} bis {analysisEndDay.strftime('%d.%m.%Y')}"
 
-    with open("stat_map_notServiced.svg", "w") as outputSvg:
+    with open(out_dir/"stat_map_notServiced.svg", "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict))
 
-visualize_delay(datetime(2026,2,11,0,0,0), datetime(2026,2,15,0,0,0))
-visualize_notServiced(datetime(2026,2,11,0,0,0), datetime(2026,2,15,0,0,0))
+#visualize_delay(datetime(2026,2,11,0,0,0), datetime(2026,2,15,0,0,0))
+#visualize_notServiced(datetime(2026,2,11,0,0,0), datetime(2026,2,15,0,0,0))

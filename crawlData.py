@@ -5,13 +5,19 @@ from pathlib import Path
 import logging
 import sqlite3
 import json
+import subprocess
+import traceback
 
-logger = logging.getLogger("")
-#logger.setLevel(logging.DEBUG)
+base_dir      = Path(__file__).parent
+logging.basicConfig(
+    filename=base_dir/"error.log",
+    level=logging.ERROR,
+    format='%(asctime)s %(levelname)s %(message)s'
+)
 
-url = "https://efa-bw.de/trias"
-requestorKey = open(Path("./requestor.key")).read()
-namespaces = {
+url           = "https://efa-bw.de/trias"
+requestorKey  = open(base_dir/"requestor.key").read()
+namespaces    = {
     "http://www.vdv.de/trias": None,
     "http://www.siri.org.uk/siri": "siri",
     "http://www.w3.org/2001/XMLSchema-instance": "xsi"
@@ -53,14 +59,11 @@ def triasStrFromDatetime(datetimeObj):
     datetimeObj = datetimeObj.astimezone(timezone.utc)
     return datetimeObj.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-
-def printResponseStatistics(responseDict):
-    serviceDelivery   = responseDict["Trias"]["ServiceDelivery"]
-    responseTimestamp = datetimeFromTriasDatetimeStr(serviceDelivery["siri:ResponseTimestamp"])
-    print(f"Response timestamp: {responseTimestamp}")
-
-    calculationTime = serviceDelivery["CalcTime"]
-    print(f"Calculation time: {calculationTime}")
+def getResponseStatistics(responseDict):
+    serviceDelivery      = responseDict["Trias"]["ServiceDelivery"]
+    responseTimestampStr = serviceDelivery["siri:ResponseTimestamp"]
+    calculationTime      = int(serviceDelivery["CalcTime"])
+    return responseTimestampStr, calculationTime
 
 def stopPointRef_from_LocationName(LocationName):
     findStationRequestXml = Path("./LocationInformationRequest.xml")
@@ -90,7 +93,6 @@ def stopPointRef_from_LocationName(LocationName):
         ref  = locationResult["Location"]["StopPoint"]["StopPointRef"]
         name = locationResult["Location"]["StopPoint"]["StopPointName"]["Text"]
         validStops.append((name, ref))
-    print(validStops)
     return validStops[0]
 
 def delaySeconds_from_serviceCall(serviceCallDict):
@@ -109,7 +111,7 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
     operatorFilter      = {"Exclude": "false", "OperatorRef": "ddb:00"}
     ptModeFilter        = {"Exclude": "false", "PtMode": "urbanRail", "RailSubmode": "suburbanRailway"}
 
-    stopEventRequestXml = Path("./StopEventRequest.xml")
+    stopEventRequestXml = Path(base_dir/"StopEventRequest.xml")
     stopEventRequestXml = open(stopEventRequestXml, "rb").read()
     stopEventRequest    = xmltodict.parse(stopEventRequestXml, process_namespaces=True, namespaces=namespaces)
 
@@ -129,7 +131,13 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
 
 
     stopEventResponse = sendRequest(stopEventRequest)
-    printResponseStatistics(stopEventResponse)
+    responseTimestampStr, calculationTimeMs = getResponseStatistics(stopEventResponse)
+    liveJourneysDict = {
+        "info": {
+            "responseTimestamp": responseTimestampStr,
+            "calculationTimeMs": calculationTimeMs,
+        },
+    }
     serviceDelivery = stopEventResponse["Trias"]["ServiceDelivery"]
     
     liveJourneys = {}
@@ -151,7 +159,7 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
         if "S" not in trainLineName:
             continue
 
-        logger.info(f"{trainLineName} ({trainJourney}) from {trainOrigin} to {trainDestination}")
+        logging.info(f"{trainLineName} ({trainJourney}) from {trainOrigin} to {trainDestination}")
         
         allStops = []
         for cls in ["PreviousCall", "ThisCall", "OnwardCall"]:
@@ -172,11 +180,11 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
         lastStopTimetArrival = datetimeFromTriasDatetimeStr(lastStopArrival["TimetabledTime"])
         lastStopEstimArrival = datetimeFromTriasDatetimeStr(lastStopArrival.get("EstimatedTime"))
 
-        logger.info(f"from {firstStopTimetDeparture} to {lastStopTimetArrival}")
+        logging.info(f"from {firstStopTimetDeparture} to {lastStopTimetArrival}")
 
         #check if first stop is still in the future
         if currentTime < firstStopTimetDeparture:
-            logging.info(f"train has not started yet, will start at {firstStopTimetDeparture}")
+            logging.debug(f"train has not started yet, will start at {firstStopTimetDeparture}")
             toEarly += 1
             continue
 
@@ -242,7 +250,7 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
                 "isDeviated":           (serviceData.get("Deviation") == "true"),
                 "stopsList":            processedStopsList,
             })
-            logging.info(f"train has already ended at final stop at estim {lastStopTimetArrival}")
+            logging.debug(f"train has already ended at final stop at estim {lastStopTimetArrival}")
             continue
             
         delayMinutes         = None
@@ -310,7 +318,7 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
                 nextStopEstimArrival = estimateArrival
         else:
             error += 1
-            logger.error(f"no delay info for {trainLineName}, {trainJourney}, {serviceData}")
+            logging.debug(f"no delay info for {trainLineName}, {trainJourney}, {serviceData}")
             continue
 
 
@@ -331,7 +339,7 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
             for att in attributes:
                 if "Incident" in att["Code"]:
                     incidentText = att["Text"]["Text"]
-                    print(f"warning incident report: {incidentText}")
+                    logging.debug(f"incident report: {incidentText}")
         if trainCancelled:
             liveJourneys[trainJourney+":"+str(operatingDayRef)] = {
                 "delay":            None,
@@ -354,12 +362,87 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
                 "progressNextStop": progressToNextStop,
                 "cancelled":        False
             }
-    return loggedJourneys, liveJourneys
+    liveJourneysDict["journeys"] = liveJourneys
+    return loggedJourneys, liveJourneysDict
 
-"""
-print(stopPointRef_from_LocationName("Esslingen (Neckar)"))
-exit(0)
-"""
+def getSqlConnection():
+    sqlJourneyTableInit = """
+    CREATE TABLE IF NOT EXISTS journeys (
+        operatingDay         INTEGER NOT NULL,      /*unix time utc*/
+        journeyRef           TEXT,
+        trainLineName        TEXT,
+        trainOrigin          TEXT,
+        trainDestination     TEXT,
+        trainIncidentMessage TEXT,
+        isCancelled          INTEGER,               /*boolean*/
+        isUnplanned          INTEGER,               /*boolean*/
+        isDeviated           INTEGER,               /*boolean*/
+        PRIMARY KEY (operatingDay, journeyRef)
+    );"""
+
+    sqlStopTableInit = """CREATE TABLE IF NOT EXISTS stops (
+        operatingDay        INTEGER NOT NULL,       /*unix time utc*/
+        journeyRef          TEXT NOT NULL,
+        stopIndex           INTEGER NOT NULL,
+        stopPointName       TEXT,
+        stopPointRef        TEXT,
+        notServiced         INTEGER,                /*boolean*/
+        departureTimetable  INTEGER,                /*unix time utc*/
+        departureEstimate   INTEGER,                /*unix time utc*/
+        arrivalTimetable    INTEGER,                /*unix time utc*/
+        arrivalEstimate     INTEGER,                /*unix time utc*/
+        PRIMARY KEY (operatingDay, journeyRef, stopIndex),
+        FOREIGN KEY (operatingDay, journeyRef) REFERENCES journeys(operatingDay, journeyRef)
+    );
+    """
+    yearInt = datetime.now().year
+    connection = sqlite3.connect(base_dir/f'loggedJourney_{yearInt}.db')
+    cursor = connection.cursor()
+    cursor.execute(sqlJourneyTableInit)
+    cursor.execute(sqlStopTableInit)
+    connection.commit()
+    cursor.close()
+    return connection
+
+def copy_www_to_webhost(local_path, remote_path = 'bwp@p0ng.de:/var/www/html/trias/'):
+    for src_path in local_path.iterdir():
+        scp_command = ['/run/current-system/sw/bin/scp', src_path, remote_path]
+        try:
+            subprocess.run(scp_command, check=True)
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Error during file copy: {e}")
+
+def insertJourneysInDb(journeys):
+    connection = getSqlConnection()
+    cursor = connection.cursor()
+    journey_keys = [
+        "operatingDay", "journeyRef", "trainLineName", 
+        "trainOrigin", "trainDestination", "trainIncidentMessage", 
+        "isCancelled", "isUnplanned", "isDeviated",
+    ]
+    for journey in journeys:
+        journey_data = tuple(journey[key] for key in journey_keys)
+        insert_journey_data = f'''
+            INSERT OR REPLACE INTO journeys ({', '.join(journey_keys)})
+            VALUES ({', '.join(['?'] * len(journey_keys))});
+        '''
+        cursor.execute(insert_journey_data, journey_data)
+
+        for stop in journey["stopsList"]:
+            stop_keys = [
+                "operatingDay", "journeyRef", "stopIndex",
+                "stopPointName", "stopPointRef", "notServiced",
+                "departureTimetable", "departureEstimate", "arrivalTimetable",
+                "arrivalEstimate",
+            ]
+            stop_data = tuple(stop[key] for key in stop_keys)
+            insert_stop_data = f'''
+                INSERT OR REPLACE INTO stops ({', '.join(stop_keys)})
+                VALUES ({', '.join(['?'] * len(stop_keys))});
+            '''
+            cursor.execute(insert_stop_data, stop_data)
+    connection.commit()
+    connection.close()
 
 def getCurrentRunningTrains():
     checkAtStations = [
@@ -374,98 +457,51 @@ def getCurrentRunningTrains():
         ('Esslingen (Neckar)', 'de:08116:7800'),
     ]
 
-    allLiveJourneys = {}
+    allLiveJourneys = {"info": {"calculationTimeMs": 0}, "journeys": dict()}
     allLoggedJourneys = []
     for stationTuple in checkAtStations:
-        print(f"station {stationTuple[0]}")
+        logging.info(f"station {stationTuple[0]}")
         loggedJourneys, liveJourneys = getAllDelaysThroughStation(*stationTuple, numResults=100)
-        allLiveJourneys   |= liveJourneys
+        allLiveJourneys["info"]["calculationTimeMs"] += liveJourneys["info"]["calculationTimeMs"]
+        allLiveJourneys["info"]["responseTimestampUtc"] = liveJourneys["info"]["responseTimestamp"]
+        allLiveJourneys["journeys"] |= liveJourneys["journeys"]
+        #combine all logged journeys
         allLoggedJourneys += loggedJourneys
     allLiveJourneys = dict(sorted(allLiveJourneys.items()))
     return allLoggedJourneys, allLiveJourneys
 
+try:
+    #get trias data
+    allLoggedJourneys, allLiveJourneys = getCurrentRunningTrains()
 
-sqlJourneyTableInit = """
-CREATE TABLE IF NOT EXISTS journeys (
-    operatingDay         INTEGER NOT NULL,      /*unix time utc*/
-    journeyRef           TEXT,
-    trainLineName        TEXT,
-    trainOrigin          TEXT,
-    trainDestination     TEXT,
-    trainIncidentMessage TEXT,
-    isCancelled          INTEGER,               /*boolean*/
-    isUnplanned          INTEGER,               /*boolean*/
-    isDeviated           INTEGER,               /*boolean*/
-    PRIMARY KEY (operatingDay, journeyRef)
-);"""
+    #write into database
+    insertJourneysInDb(allLoggedJourneys)
 
-sqlStopTableInit = """CREATE TABLE IF NOT EXISTS stops (
-    operatingDay        INTEGER NOT NULL,       /*unix time utc*/
-    journeyRef          TEXT NOT NULL,
-    stopIndex           INTEGER NOT NULL,
-    stopPointName       TEXT,
-    stopPointRef        TEXT,
-    notServiced         INTEGER,                /*boolean*/
-    departureTimetable  INTEGER,                /*unix time utc*/
-    departureEstimate   INTEGER,                /*unix time utc*/
-    arrivalTimetable    INTEGER,                /*unix time utc*/
-    arrivalEstimate     INTEGER,                /*unix time utc*/
-    PRIMARY KEY (operatingDay, journeyRef, stopIndex),
-    FOREIGN KEY (operatingDay, journeyRef) REFERENCES journeys(operatingDay, journeyRef)
-);
-"""
+    #write live data into json
+    with open(base_dir/"www/currentRunningTrains.json", "w") as outputfile:
+        outputfile.write(json.dumps(allLiveJourneys, indent=4))
 
-connection = sqlite3.connect('loggedJourney_2026.db')
-cursor = connection.cursor()
-cursor.execute(sqlJourneyTableInit)
-cursor.execute(sqlStopTableInit)
-connection.commit()
+    #render livemap
+    www_dir = base_dir/'www'
+    try:
+        from visualize_liveMap import update_live_map
+        update_live_map(www_dir)
+    except Exception as e:
+        logging.exception("Failed to update live map")
 
-def insertJourneyInDb(connection, journey):
-    journey_keys = [
-        "operatingDay", "journeyRef", "trainLineName", 
-        "trainOrigin", "trainDestination", "trainIncidentMessage", 
-        "isCancelled", "isUnplanned", "isDeviated",
-    ]
-    journey_data = tuple(journey[key] for key in journey_keys)
-    insert_journey_data = f'''
-        INSERT OR REPLACE INTO journeys ({', '.join(journey_keys)})
-        VALUES ({', '.join(['?'] * len(journey_keys))});
-    '''
-    cursor.execute(insert_journey_data, journey_data)
-    
-    for stop in loggedJourney["stopsList"]:
-        stop_keys = [
-            "operatingDay", "journeyRef", "stopIndex",
-            "stopPointName", "stopPointRef", "notServiced",
-            "departureTimetable", "departureEstimate", "arrivalTimetable",
-            "arrivalEstimate",   
-        ]
-        stop_data = tuple(stop[key] for key in stop_keys)
-        insert_stop_data = f'''
-            INSERT OR REPLACE INTO stops ({', '.join(stop_keys)})
-            VALUES ({', '.join(['?'] * len(stop_keys))});
-        '''
-        cursor.execute(insert_stop_data, stop_data)
-        
+    #render statmap
+    try:
+        current_utc = datetime.now(timezone.utc)
+        analysisEndDay = current_utc
+        analysisStartDay = current_utc - timedelta(days=7)
+        from visualize_statMap import update_stat_delay_map, update_stat_notServiced_map
+        update_stat_delay_map(analysisStartDay, analysisEndDay, www_dir)
+        update_stat_notServiced_map(analysisStartDay, analysisEndDay, www_dir)
+    except Exception as e:
+        logging.exception("Failed to update stat map")
 
-allLoggedJourneys, allLiveJourneys = getCurrentRunningTrains()
-for loggedJourney in allLoggedJourneys:
-    insertJourneyInDb(connection, loggedJourney)
-connection.commit()
-cursor.close()
-connection.close()
-
-with open("./currentRunningTrains.json", "w") as outputfile:
-    outputfile.write(json.dumps(allLiveJourneys, indent=4))
-    
-with open("./stats.json", "a") as outputfile:
-    delayPerLine = {}
-    for journeyRefAndDay, delayData in allLiveJourneys.items():
-        delayLineName = delayData['lineName']
-        delayInMin = delayData['delay']
-        if delayLineName in delayPerLine.keys():
-            delayPerLine[delayLineName].append(delayInMin)
-        else:
-            delayPerLine[delayLineName] = [delayInMin]
-    outputfile.write(json.dumps({str(datetime.now()): delayPerLine}, indent=4))
+    #upload
+    copy_www_to_webhost(www_dir)
+except Exception:
+    logging.error("Unhandled exception:\n%s", traceback.format_exc())
+    raise
