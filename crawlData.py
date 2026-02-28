@@ -223,36 +223,50 @@ def getLiveJourney(serviceData, allStops, currentTime):
     delayList = []
     for stop in allStops:
         thisCall = stop["CallAtStop"]
+        ttbArr, estArr, ttbDep, estDep = getArrAndDepTimes(thisCall)
+        delayList.append({
+            "estArr":   datetimeFromTriasDatetimeStr(estArr),
+            "ttbArr":   datetimeFromTriasDatetimeStr(ttbArr),
+            "estDep":   datetimeFromTriasDatetimeStr(estDep),
+            "ttbDep":   datetimeFromTriasDatetimeStr(ttbDep),
+        })
+    for stopIdx, stop in enumerate(allStops):
+        thisCall = stop["CallAtStop"]
         notServicedStop = thisCall.get("NotServicedStop")
-        ttbArr, estArr, ttbDep, estArr = getArrAndDepTimes(thisCall)
-        delayArr = None
-        delayDep = None
-        estArr   = None
-        ttbArr   = None
+        if notServicedStop:
+            #try to find delay before current stop
+            for beforeStopIdx in range(stopIdx-1,-1,-1):
+                estDep = allStops[beforeStopIdx]["estDep"]
+                if estDep is None:
+                    continue
+                ttbDep = allStops[beforeStopIdx]["ttbDep"]
+                delayBefore = (estDep - ttbDep).total_seconds()
+            else:
+                delayBefore = None
+            #try to find delay after current stop
+            for afterStopIdx in range(stopIdx+1, len(allStops)):
+                estArr = allStops[afterStopIdx]["estArr"]
+                if estDep is None:
+                    continue
+                ttbArr = allStops[beforeStopIdx]["ttbArr"]
+                delayAfter = (estArr - ttbArr).total_seconds()
+            else:
+                delayAfter = None
 
-        if estArr is not None:
-            estArr = datetimeFromTriasDatetimeStr(estArr)
-            ttbArr = datetimeFromTriasDatetimeStr(ttbArr)
-            if estArr is not None:
-                delayArr = (estArr-ttbArr).total_seconds()
-        if estDep is not None:
-            estDep = datetimeFromTriasDatetimeStr(estDep)
-            ttbDep = datetimeFromTriasDatetimeStr(ttbDep)
-            if estDep is not None:
-                delayDep = (estDep-ttbDep).total_seconds()
+            if delayBefore is None and delayAfter is None:
+                logging.error("insufficient live data")
+                return
+
+
+
+
+    for stop in allStops:
+
         if notServicedStop: #for not serviced stop duplicate delay of previous stops
             if delayArr is None:
                 delayArr = delayList[-1]["delayArr"]
             if delayDep is None:
                 delayDep = delayList[-1]["delayDep"]
-        delayList.append({
-            "delayArr": delayArr,
-            "delayDep": delayDep,
-            "estArr":   estArr,
-            "ttbArr":   ttbArr,
-            "estDep":   estDep,
-            "ttbDep":   ttbDep,
-        })
 
 
 
