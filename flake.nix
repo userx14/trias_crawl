@@ -7,7 +7,6 @@
     pkgs = import nixpkgs { inherit system; };
     pythonEnv = pkgs.python3.withPackages (ps: with ps; [
       requests
-      numpy
       svgpathtools
       xmltodict
 

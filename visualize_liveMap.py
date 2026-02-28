@@ -1,153 +1,163 @@
-import xmltodict
-from svgpathtools import CubicBezier, parse_path
+from svgpathtools        import parse_path
 from svgpathtools.parser import parse_transform
-from svgpathtools.path import translate, rotate, scale
-import math
-import json
-import logging
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
-from lineStations import linesStations
+from svgpathtools.path   import translate, rotate, scale
+from datetime            import datetime
+from lineStations        import linesStations
+import math, json, xmltodict, logging
 
-base_dir         = Path(__file__).parent
-json_data_source = base_dir/"www/currentRunningTrains.json"
-svg_in_dir       = base_dir/"live_map_source.svg"
+segmBetweenStops = 3
 
-def update_live_map(out_dir):
-    svg_out_dir = out_dir/"live_map.svg"
-    delayIconsId = {
-        "delay0":  None,
-        "delay3":  None,
-        "delay6":  None,
-        "delay15": None,
-    }
-    linesPathId  = {
-        "S1":  None,
-        "S2":  None,
-        "S3":  None,
-        "S4":  None,
-        "S5":  None,
-        "S6":  None,
-        "S60": None,
-        "S62": None,
-    }
-
-    def placeTrain(lineName, currentStation, reverseDirection, progress, delayMin):
-        if lineName not in linesStations.keys():
-            logging.debug(f"trainLineName {trainLineName} unknown")
-            return
-        lineStations = linesStations[lineName]
-        linePath = linesPathId[lineName]
-        parsedPath = parse_path(linePath["@d"])
-        if reverseDirection:
-            #print("revDir")
-            parsedPath = parsedPath.reversed()
-            stationIdList   = [station[0] for station in lineStations[::-1]]
-            stationNameList = [station[1] for station in lineStations[::-1]]
-        else:
-            #print("normDir")
-            stationIdList   = [station[0] for station in lineStations]
-            stationNameList = [station[1] for station in lineStations]
-        if currentStation in stationIdList:
-            stationNr = stationIdList.index(currentStation)
-        elif currentStation in stationNameList:
-            stationNr = stationNameList.index(currentStation)
-        else:
-            logging.debug(f"station {currentStation} not found in this line")
-            return
-
-        startSegmentIdx = stationNr * 3
-        if stationNr != len(lineStations)-1:
-
-            pathLenghts = [parsedPath[startSegmentIdx+offsetIdx].length() for offsetIdx in range(3)]
-            totalPathLength = sum(pathLenghts)
-            pathRatios = [pathLen/totalPathLength for pathLen in pathLenghts]
-            tempPathLength = 0
-            for pathIdx, pathRatio in enumerate(pathRatios):
-                tempPathLength += pathRatio
-                if progress < tempPathLength:
-                    break
-            progressInCurrentPath = (progress - sum(pathRatios[:pathIdx]))/pathRatios[pathIdx]
-        else:
-            pathIdx = -1
-            progressInCurrentPath = 1
-        #print(f"progressInCurrentPath {progressInCurrentPath}")
-        #print(pathIdx)
-        activeSegment = parsedPath[startSegmentIdx+pathIdx]
-        position = activeSegment.point(progressInCurrentPath)
-        tangent = activeSegment.derivative(progressInCurrentPath)
-        angle = math.atan2(tangent.imag, tangent.real)
-
-        if delayMin <= 3:
-            delayIcon = delayIconsId["delay0"]
-        elif delayMin <= 6:
-            delayIcon = delayIconsId["delay3"]
-        elif delayMin <= 15:
-            delayIcon = delayIconsId["delay6"]
-        else:
-            delayIcon = delayIconsId["delay15"]
-        delayIcon     = delayIcon.copy()
-        delayIconPath = parse_path(delayIcon['@d'])
-        xmin, xmax, ymin, ymax = delayIconPath.bbox()
-        centerX = (xmin + xmax) / 2
-        centerY = (ymin + ymax) / 2
-
-        transfMat  = parse_transform(delayIcon["@transform"])
-        #oldRotScale = f"matrix({transfMat[0,0]} {transfMat[1,0]} {transfMat[0,1]} {transfMat[1,1]} 0 0)"
-        delayIconPath = translate(delayIconPath, -centerX-1J*centerY)
-        delayIconPath = scale(delayIconPath, (transfMat[0,1]**2 + transfMat[1,1]**2) ** 0.5)
-        delayIconPath = rotate(delayIconPath, degs=180/math.pi*angle+90,  origin=0)
-        delayIconPath = translate(delayIconPath, position)
-        delayIcon["@d"] = delayIconPath.d()
-        delayIcon.pop("@transform", None)
-        delayIcon.pop("@inkscape:original-d", None)
-        svgDict["svg"]["path"].append(delayIcon)
-        #print(f"pos {position}")
-        #print(f"station num {stationNr}")
-
-    with open(svg_in_dir, "r") as inputSvg:
-        svgFile = inputSvg.read()
-    svgDict = xmltodict.parse(svgFile)
-    for path in svgDict["svg"]["path"]:
-        pathId = path["@id"]
-        if pathId in linesPathId.keys():
-            linesPathId[pathId]  = path
-        if pathId in delayIconsId.keys():
-            delayIconsId[pathId] = path
-    for group in svgDict["svg"]["g"]:
-        for path in group["path"]:
-            pathId = path["@id"]
-            if pathId in linesPathId.keys():
-                linesPathId[pathId]  = path
-            if pathId in delayIconsId.keys():
-                delayIconsId[pathId] = path
-    if any([item == None for item in delayIconsId.values()]):
-        print(delayIconsId.values())
-        raise ValueError("Delay icon not present in svg")
-
-    if any([item == None for item in linesPathId.values()]):
-        raise ValueError("Line path not present in svg")
+def changeMapTitle(svgDict, newTitle):
     if isinstance(svgDict["svg"]["text"], list):
         for textElement in svgDict["svg"]["text"]:
             if textElement["@id"] == "title":
-                textElement["tspan"]["#text"] = f"Livekarte, aktualisiert {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
+                textElement["tspan"]["#text"] = newTitle
     else:
-        svgDict["svg"]["text"]["tspan"]["#text"] = f"Livekarte, aktualisiert {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
+        svgDict["svg"]["text"]["tspan"]["#text"] = newTitle
 
-    with open(json_data_source) as inputfile, open(svg_out_dir, "w") as outputSvg:
+def parseSvg(inputSvgPath):
+    with open(inputSvgPath, "r") as inputSvg:
+        svgFile = inputSvg.read()
+    svgDict = xmltodict.parse(svgFile)
+    trainIconIds  = ["delay0", "delay3", "delay6", "delay15"]
+    trainIconDict = dict()
+    lineIds       = ["S1", "S2", "S3", "S4", "S5", "S6", "S60", "S62"]
+    linesPathDict = dict()
+    #search for SBahn Line Paths and Train Arrows and store references
+    for path in svgDict["svg"]["path"]: #in root paths
+        pathId = path["@id"]
+        if pathId in trainIconIds:
+            trainIconDict[pathId] = path
+        if pathId in lineIds:
+            linesPathDict[pathId] = path
+    for group in svgDict["svg"]["g"]: #in paths that are grouped
+        for path in group["path"]:
+            pathId = path["@id"]
+            if pathId in trainIconIds:
+                trainIconDict[pathId]  = path
+            if pathId in lineIds:
+                linesPathDict[pathId]   = path
+    if len(trainIconIds) != len(trainIconDict) or len(lineIds) != len(linesPathDict):
+        raise ValueError("Missing line or icon in svg")
+    return svgDict, linesPathDict, trainIconDict
+
+def findStationNumber(lineName, stationRefOrName):
+    if lineName not in linesStations.keys():
+        return None #line not found
+    currentLineStations = linesStations[lineName]
+    stationRefList      = [station[0] for station in currentLineStations]
+    stationNameList     = [station[1] for station in currentLineStations]
+    if stationRefOrName in stationRefList:
+        return stationRefList.index(stationRefOrName)
+    elif stationRefOrName in stationNameList:
+        return stationNameList.index(stationRefOrName)
+    else:
+        return None #station not found on this line
+
+def getPosAngleFromPath(lineName, linesPathDict, currStationIdx, nextStationIdx, progress):
+    currentLineStations = linesStations[lineName]
+    linePath = linesPathDict[lineName]
+    parsedPath = parse_path(linePath["@d"])
+    if nextStationIdx < currStationIdx:
+        startSegmentIdx = segmBetweenStops*(len(currentLineStations) - (currStationIdx + 1))
+        endSegmentIdx   = segmBetweenStops*(len(currentLineStations) - (nextStationIdx + 1))
+        parsedPath = parsedPath.reversed()
+    else:
+        startSegmentIdx = segmBetweenStops*currStationIdx
+        endSegmentIdx   = segmBetweenStops*nextStationIdx
+    pathLengths = [parsedPath[idx].length() for idx in range(startSegmentIdx, endSegmentIdx)]
+    totalPathLength = sum(pathLengths)
+    pathRatios = [pathLen/totalPathLength for pathLen in pathLengths]
+    tempPathLength = 0
+    for pathIdx, pathRatio in enumerate(pathRatios):
+        tempPathLength += pathRatio
+        if progress < tempPathLength:
+            break
+    progressInCurrentPath = (progress - sum(pathRatios[:pathIdx]))/pathRatios[pathIdx]
+    activeSegment = parsedPath[startSegmentIdx+pathIdx]
+    trainPosition = activeSegment.point(progressInCurrentPath)
+    trainTangent  = activeSegment.derivative(progressInCurrentPath)
+    angle         = math.atan2(trainTangent.imag, trainTangent.real)
+    return trainPosition, angle
+
+def getTrainIcon(trainIconDict, delay, trainPosition, angle):
+    if delay <= 3:
+        trainIcon = trainIconDict["delay0"]
+    elif delay <= 6:
+        trainIcon = trainIconDict["delay3"]
+    elif delay <= 15:
+        trainIcon = trainIconDict["delay6"]
+    else:
+        trainIcon = trainIconDict["delay15"]
+    trainIcon     = trainIcon.copy()
+    delayIconPath = parse_path(trainIcon['@d'])
+    xmin, xmax, ymin, ymax = delayIconPath.bbox()
+    centerX = (xmin + xmax) / 2
+    centerY = (ymin + ymax) / 2
+    transfMat  = parse_transform(trainIcon["@transform"])
+    delayIconPath = translate(delayIconPath, -centerX-1J*centerY)
+    delayIconPath = scale(delayIconPath, (transfMat[0,1]**2 + transfMat[1,1]**2) ** 0.5)
+    delayIconPath = rotate(delayIconPath, degs=180/math.pi*angle+90, origin=0)
+    delayIconPath = translate(delayIconPath, trainPosition)
+    trainIcon["@d"] = delayIconPath.d()
+    trainIcon.pop("@transform", None)
+    trainIcon.pop("@inkscape:original-d", None)
+    return trainIcon
+
+def getStopIndices(trainData, linesPathDict):
+    lineName = trainData["lineName"]
+    currentStopRefWithoutPlatform = ":".join(trainData["currentStopRef"].split(":")[:3])
+    nextStopRefWithoutPlatform    = ":".join(trainData["nextStopRef"].split(":")[:3])
+    if nextStopRefWithoutPlatform ==  "de:08111:6115": #convert HBF oben to HBF tief
+        nextStopRefWithoutPlatform = "de:08111:6118"
+    if currentStopRefWithoutPlatform == "de:08111:6115": #convert HBF oben to HBF tief
+        currentStopRefWithoutPlatform = "de:08111:6118"
+    if lineName not in linesPathDict.keys():
+        #handle replacement service
+        #when line is S52, try to map to S5 and S2
+        digits = [char for char in lineName if char.isdigit()]
+        for digit in digits[:2]:
+            lineName = "S"+digit
+            currStationIdx = findStationNumber(lineName, currentStopRefWithoutPlatform)
+            nextStationIdx = findStationNumber(lineName, nextStopRefWithoutPlatform)
+            if (currStationIdx is None) or (nextStationIdx is None):
+                continue
+            break
+        else:
+            logging.error(f"Could not map train on line {lineName} to existing line")
+            return None, None, None
+    else:
+        currStationIdx = findStationNumber(lineName, currentStopRefWithoutPlatform)
+        nextStationIdx = findStationNumber(lineName, nextStopRefWithoutPlatform)
+        if currStationIdx is None:
+            logging.error(f"Nonexistent stop {currentStopRefWithoutPlatform} on line {lineName}")
+            return None, None, None
+        if nextStationIdx is None:
+            logging.error(f"Nonexistent stop {nextStopRefWithoutPlatform} on line {lineName}")
+            return None, None, None
+    return lineName, currStationIdx, nextStationIdx
+
+def placeTrains(svgDict, linesPathDict, trainIconDict, runningTrains):
+    for trainData in runningTrains:
+        lineName, cStatIdx, nStatIdx = getStopIndices(trainData, linesPathDict)
+        if lineName is None:
+            continue
+        delay                        = trainData["delay"]
+        progress                     = trainData["progressNextStop"]
+        trainPos, angle              = getPosAngleFromPath(lineName, linesPathDict, cStatIdx, nStatIdx, progress)
+        trainIcon                    = getTrainIcon(trainIconDict, delay, trainPos, angle)
+        svgDict["svg"]["path"].append(trainIcon)
+
+def render_liveMap(inputDataJsonPath, inputSvgPath, outputSvgPath):
+    svgDict, linesPathDict, trainIconDict = parseSvg(inputSvgPath)
+    title = "Livekarte, aktualisiert "
+    title += str(datetime.now().strftime('%d.%m.%Y %H:%M:%S'))
+    changeMapTitle(svgDict, title)
+    with open(inputDataJsonPath) as inputfile:
         runningTrainsDict = json.loads(inputfile.read())["journeys"]
-        for trainRefAndOpData, trainData in runningTrainsDict.items():
-            if trainData["lineName"] not in linesPathId.keys():
-                continue
-            if trainData["cancelled"]:
-                continue
-            backwardsJourney = (trainRefAndOpData.split(":")[3] == "R")
-            stopRefWithoutPlatform = ":".join(trainData["currentStopRef"].split(":")[:-2])
-            if stopRefWithoutPlatform == "de:08111:6115": #convert HBF oben to HBF tief
-                stopRefWithoutPlatform = "de:08111:6118"
-            placeTrain(trainData["lineName"],
-                    stopRefWithoutPlatform,
-                    backwardsJourney,
-                    trainData["progressNextStop"],
-                    trainData["delay"])
+    placeTrains(svgDict, linesPathDict, trainIconDict, runningTrainsDict.values())
+    with open(outputSvgPath, "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict))
+
+if __name__ == "__main__":
+    render_liveMap("./currentRunningTrains.json", "./live_map_source.svg", "live_map.svg")
