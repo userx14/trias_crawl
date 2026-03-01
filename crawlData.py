@@ -153,12 +153,12 @@ def logJourney(serviceData, allStops): #convert this journey into a compressed f
             "stopPointName":       thisCall["StopPointName"]["Text"],
             "stopPointRef":        thisCall["StopPointRef"],
             "notServiced":         (thisCall.get("NotServicedStop") == "true"),
-            "departureTimetable":  timetableDeparture.timestamp() if timetableDeparture is not None else None,
-            "departureEstimate":   estimateDeparture.timestamp() if estimateDeparture is not None else None,
-            "arrivalTimetable":    timetableArrival.timestamp() if timetableArrival is not None else None,
-            "arrivalEstimate":     estimateArrival.timestamp() if estimateArrival is not None else None,
+            "departureTimetable":  timetableDeparture,
+            "departureEstimate":   estimateDeparture,
+            "arrivalTimetable":    timetableArrival,
+            "arrivalEstimate":     estimateArrival,
         })
-    loggedJourneys.append({
+    return {
         "journeyRef":           serviceData["JourneyRef"],
         "operatingDay":         operatingDayRef.timestamp(),
         "trainLineName":        serviceData["ServiceSection"]["PublishedLineName"]["Text"],
@@ -169,7 +169,7 @@ def logJourney(serviceData, allStops): #convert this journey into a compressed f
         "isUnplanned":          (serviceData.get("Unplanned") == "true"),
         "isDeviated":           (serviceData.get("Deviation") == "true"),
         "stopsList":            processedStopsList,
-    })
+    }
 
 def compareAllStopsToCurrentTime(allStops, currentTime):
     firstStop = allStops[0]
@@ -213,162 +213,147 @@ def getArrAndDepTimes(thisCall):
         logging.debug(f"arriveES: {estArr}")
     return ttbArr, estArr, ttbDep, estArr
 
-def getLiveJourney(serviceData, allStops, currentTime):
-    delayMinutes         = None
-    nextStopEstimArrival = None #for calculating progress in between stations
-    trainCancelled       = False
-    progressToNextStop   = 0
-
+def getLiveJourney(serviceData, allStops, currentTime, liveJourneyDict):
     #make delayList
-    delayList = []
+    processedStopList = []
     for stop in allStops:
         thisCall = stop["CallAtStop"]
         ttbArr, estArr, ttbDep, estDep = getArrAndDepTimes(thisCall)
-        delayList.append({
-            "estArr":   datetimeFromTriasDatetimeStr(estArr),
-            "ttbArr":   datetimeFromTriasDatetimeStr(ttbArr),
-            "estDep":   datetimeFromTriasDatetimeStr(estDep),
-            "ttbDep":   datetimeFromTriasDatetimeStr(ttbDep),
+        processedStopList.append({
+            "estArr":      estArr,
+            "ttbArr":      ttbArr,
+            "estDep":      estDep,
+            "ttbDep":      ttbDep,
+            "notServiced": (thisCall.get("NotServicedStop") == "true"),
         })
-    for stopIdx, stop in enumerate(allStops):
-        thisCall = stop["CallAtStop"]
-        notServicedStop = thisCall.get("NotServicedStop")
-        if notServicedStop:
-            #try to find delay before current stop
+
+    #fill out non serviced stops
+    for stopIdx in range(len(processedStopList)):
+        processedStop = processedStopList[stopIdx]
+        if processedStop["notServiced"]:
+            #try to find realtime data before current stop
             for beforeStopIdx in range(stopIdx-1,-1,-1):
-                estDep = allStops[beforeStopIdx]["estDep"]
+                estDep = processedStopList[beforeStopIdx]["estDep"]
                 if estDep is None:
                     continue
-                ttbDep = allStops[beforeStopIdx]["ttbDep"]
-                delayBefore = (estDep - ttbDep).total_seconds()
+                ttbDep = processedStopList[beforeStopIdx]["ttbDep"]
+                delayBefore = (estDep - ttbDep)
+                break
             else:
                 delayBefore = None
-            #try to find delay after current stop
-            for afterStopIdx in range(stopIdx+1, len(allStops)):
-                estArr = allStops[afterStopIdx]["estArr"]
-                if estDep is None:
+
+            #try to find realtime data after current stop
+            for afterStopIdx in range(stopIdx+1, len(processedStopList)):
+                estArr = processedStopList[afterStopIdx]["estArr"]
+                if estArr is None:
                     continue
-                ttbArr = allStops[beforeStopIdx]["ttbArr"]
-                delayAfter = (estArr - ttbArr).total_seconds()
+                ttbArr = processedStopList[afterStopIdx]["ttbArr"]
+                delayAfter = (estArr - ttbArr)
             else:
                 delayAfter = None
 
-            if delayBefore is None and delayAfter is None:
+            if (delayBefore is not None) and (delayAfter is not None):
+                processedStop["intermediateNotServiced"] = True
+            else:
+                processedStop["intermediateNotServiced"] = False
+
+            if delayBefore is not None:
+                if processedStop["ttbArr"]:
+                    processedStop["estArr"] = processedStop["ttbArr"] + delayBefore
+                if processedStop["ttbDep"]:
+                    processedStop["estDep"] = processedStop["ttbDep"] + delayBefore
+            elif delayAfter is not None:
+                if processedStop["ttbArr"]:
+                    processedStop["estArr"] = processedStop["ttbArr"] + delayAfter
+                if processedStop["ttbDep"]:
+                    processedStop["estDep"] = processedStop["ttbDep"] + delayAfter
+            else:
+                print("ins data1")
                 logging.error("insufficient live data")
-                return
+                return 0
+        else:
+            if (processedStop["estArr"]) is None and (processedStop["estDep"] is None):
+                print("ins data2")
+                logging.error("nonexistent live data")
+                return 0
 
+    if currentTime < processedStopList[-1]["estArr"]:
+        print("already end")
+        return 1 #train has already ended
 
+    if processedStopList[0]["ttbDep"] < currentTime:
+        print("not yet")
+        return -1 #train has not yet started
 
-
-    for stop in allStops:
-
-        if notServicedStop: #for not serviced stop duplicate delay of previous stops
-            if delayArr is None:
-                delayArr = delayList[-1]["delayArr"]
-            if delayDep is None:
-                delayDep = delayList[-1]["delayDep"]
-
-
-
-    for stop in allStops[::-1]:
-        thisCall        = stop["CallAtStop"]
-        stopNumber      = allStops.index(stop)
-        notServicedStop = thisCall.get("NotServicedStop")
-        departureDict   = thisCall.get("ServiceDeparture")
-        stopPointName   = thisCall["StopPointName"]["Text"]
-
-        delayDict = delayList[stopNumber]
-        if (delayDict["estDep"] is not None) and (delayDict["estDep"] < currentTime):
-            #left station
-
-            durationTravelingBetweenStops = currentTime - estimateDeparture
-                durationEstimatedBetweenStops = nextStopEstimArrival - estimateDeparture
-                progressToNextStop = durationTravelingBetweenStops / durationEstimatedBetweenStops
-
-
-
-            delay = delayDict["delayDep"]
+    for currentStopIdx in range(len(processedStopList)-2, 0, -1): #exclude first stop
+        processedStop = processedStopList[currentStopIdx]
+        if processedStop["estDep"] < currentTime:
+            #train left this station and is on the way to the next
+            progressToNextStop = None #still needs to be calculated
+            delay = processedStop["estDep"] - processedStop["ttbDep"]
             break
-        if (delayDict["ttbDep"] is not None) and (delayDict["delayDep"] is not None) and (delayDict["ttbDep"]+delayDict["delayDep"] < currentTime):
-            if notServicedStop:
-                delay = delayDict["delayDep"]
-                break
-            else:
-                print("missing delay info")
-                delay = None
-                break
+            #find next station
 
-        progressToNextStop = 0 #the train cannot wait at the station
-        if (delayDict["estArr"] is not None) and (delayDict["estArr"] < currentTime):
-            #train waiting at station
-            delay = delayDict["delayArr"]
+        elif processedStop["estArr"] < currentTime:
+            #train is at this station
+            progressToNextStop = 0.0
+            delay = processedStop["estArr"] - processedStop["ttbArr"]
             break
-        if (delayDict["ttbArr"] is not None) and (delayDict["delayArr"] is not None) and (delayDict["ttbArr"]+delayDict["delayArr"] < currentTime):
-            if notServicedStop:
-                delay = delayDict["delayArr"]
-                break
-            else:
-                print("missing delay info2")
-                delay = None
-                break
-
-
-        nextStopEstimArrival = estimateArrival
     else:
-        error += 1
-        logging.debug(f"no delay info for {trainLineName}, {trainJourney}, {serviceData}")
-        continue
+        if processedStop["estDep"] < currentTime:
+            #train left this station and is on the way to the next
+            progressToNextStop = None #still needs to be calculated
+        else:
+            progressToNextStop = 0.0
+        delay = processedStop["estDep"] - processedStop["ttbDep"]
 
+    cancelled = False
+    if processedStopList[currentStopIdx]["notServiced"]:
+        if not processedStopList[nextStopIdx]["intermediateNotServiced"]:
+            cancelled = True
 
-    currentStopName = thisCall["StopPointName"]["Text"]
-    currentStopRef  = thisCall["StopPointRef"]
+    #find next valid stop
+    for nextStopIdx in range(currentStopIdx+1, len(processedStopList)):
+        if processedStopList[nextStopIdx]["notServiced"]:
+            if not processedStopList[nextStopIdx]["intermediateNotServiced"]:
+                cancelled = True
+            else:
+                continue
+        break
+    if progressToNextStop is None:
+        progressToNextStop = currentTime - processedStopList[currentStopIdx]["estDep"]
+        progressToNextStop /= processedStopList[nextStopIdx]["estArr"] - processedStopList[currentStopIdx]["estDep"]
 
-    print("this is wrong, need to check which stop is the next one that is not cancelles, there could be inbetween cancelled stops")
-    nextCall        = allStops[stopNumber+1]["CallAtStop"]
-    nextStopName    = nextCall["StopPointName"]["Text"]
-    nextStopRef     = nextCall["StopPointRef"]
-
+    currentStopName = allStops[currentStopIdx]["StopPointName"]["Text"]
+    currentStopRef  = allStops[currentStopIdx]["StopPointRef"]
+    nextStopName    = allStops[nextStopIdx]["StopPointName"]["Text"]
+    nextStopRef     = allStops[nextStopIdx]["StopPointRef"]
 
     if serviceData.get("Unplanned") == "true":
         logging.error("Unplanned train :)")
     if serviceData.get("Deviation") == "true":
         logging.error("Deviated train :)")
 
-    attributes = serviceData.get("Attribute")
-    incidentText = None
-    if attributes:
-        #if there is only a single attribute, make it a list so the following code can correctely handle it
-        attributes = attributes if isinstance(attributes, list) else [attributes]
-        for att in attributes:
-            if "Incident" in att["Code"]:
-                incidentText = att["Text"]["Text"]
-                logging.debug(f"incident report: {incidentText}")
-    if trainCancelled:
-        liveJourneys[trainJourney+":"+str(operatingDayRef)] = {
-            "delay":            None,
-            "lineName":         trainLineName,
-            "incidentText":     incidentText,
-            "currentStopRef":   currentStopRef,
-            "currentStopName":  currentStopName,
-            "nextStopName":     nextStopName,
-            "nextStopRef":      nextStopRef,
-            "destination":      trainDestination,
-            "progressNextStop": progressToNextStop,
-            "cancelled":        True,
-        }
-    else:
-        liveJourneys[trainJourney+":"+str(operatingDayRef)] = {
-            "delay":            delayMinutes,
-            "lineName":         trainLineName,
-            "incidentText":     incidentText,
-            "currentStopRef":   currentStopRef,
-            "currentStopName":  currentStopName,
-            "nextStopName":     nextStopName,
-            "nextStopRef":      nextStopRef,
-            "destination":      trainDestination,
-            "progressNextStop": progressToNextStop,
-            "cancelled":        False
-        }
+    liveJourney = {
+        "delay":            delay / 60,
+        "lineName":         serviceData["ServiceSection"]["PublishedLineName"]["Text"],
+        "incidentText":     getIncidentText(serviceCallDict),
+        "currentStopName":  currentStopName,
+        "currentStopRef":   currentStopRef,
+        "nextStopName":     nextStopName,
+        "nextStopRef":      nextStopRef,
+        "destination":      serviceData["DestinationText"]["Text"],
+        "origin":           serviceData["OriginText"]["Text"],
+        "progressNextStop": progressToNextStop,
+        "cancelled":        cancelled
+    }
+    print(liveJourney)
+
+    trainJourneyRef  = serviceData["JourneyRef"]
+    operatingDayRef  = datetimeFromTriasDateStr(serviceData["OperatingDayRef"])
+    if not any([trainJourneyRef in iterRef for iterRef in liveJourneyList.keys()]): #block duplicating journey around midnight
+        liveJourneyDict[trainJourneyRef+":"+str(operatingDayRef)] = liveJourney
+    return 0
 
 def acquireTrainLineFilter(lineName):
     if "S" in lineName:
@@ -376,7 +361,7 @@ def acquireTrainLineFilter(lineName):
     return False
 
 
-def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults=5, opRef=""):
+def getAllDelaysThroughStation(passingThroughName, passingThroughRef, liveJourneysDict, numResults=5, opRef=""):
     #query should also match trains that have already passed through the station some time ago
     currentTime         = datetime.now().astimezone()
     departureAtStopTime = triasStrFromDatetime(currentTime - timedelta(hours=2))
@@ -404,12 +389,15 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
 
     stopEventResponse = sendRequest(stopEventRequest)
     responseTimestampStr, calculationTimeMs = getResponseStatistics(stopEventResponse)
-    liveJourneysDict = {
-        "info": {
+    if "info" not in liveJourneysDict.keys():
+        liveJourneysDict["info"] = {
             "responseTimestamp": responseTimestampStr,
             "calculationTimeMs": calculationTimeMs,
-        },
-    }
+        }
+    else:
+        liveJourneysDict["info"]["responseTimestamp"] = responseTimestampStr
+        liveJourneysDict["info"]["calculationTimeMs"] += calculationTimeMs
+
     serviceDelivery = stopEventResponse["Trias"]["ServiceDelivery"]
     
     liveJourneys = {}
@@ -420,14 +408,14 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
     inAcqT = 0
     error = 0
 
+    loggedJourneys = []
+
     for stopEvent in serviceDelivery["DeliveryPayload"]["StopEventResponse"]["StopEventResult"]:
         serviceData      = stopEvent["StopEvent"]["Service"]
-
         trainLine        = serviceData["ServiceSection"]["PublishedLineName"]["Text"]
         trainJourney     = serviceData["JourneyRef"]
         trainOrigin      = serviceData["OriginText"]["Text"]
         trainDestination = serviceData["DestinationText"]["Text"]
-        operatingDayRef  = datetimeFromTriasDateStr(serviceData["OperatingDayRef"])
         logging.info(f"{trainLine} ({trainJourney}) from {trainOrigin} to {trainDestination}")
 
         if not acquireTrainLineFilter(trainLine):
@@ -441,20 +429,16 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, numResults
             elif isinstance(stopOrStopsList, list):
                 allStops.extend(stopOrStopsList)
 
-        compRes = compareAllStopsToCurrentTime(allStops, currentTime)
+        compRes = getLiveJourney(serviceData, allStops, currentTime, liveJourneys)
         if compRes < 0:
             toEarly += 1
-            logJourney(serviceData, allStops)
+            logJourn = logJourney(serviceData, allStops)
+            loggedJourneys.append(logJourn)
             continue
         if compRes > 0:
             toLate += 1
             continue
-        liveJourney = getLiveJourney(serviceData, allStops, currentTime)
-        if liveJourney not None:
-            liveJourneys[trainJourney+":"+str(operatingDayRef)] = liveJourney
-
-    liveJourneysDict["journeys"] = liveJourneys
-    return loggedJourneys, liveJourneysDict
+    return loggedJourneys
 
 def getSqlConnection():
     sqlJourneyTableInit = """
@@ -550,15 +534,10 @@ def getCurrentRunningTrains():
 
     allLiveJourneys = {"info": {"calculationTimeMs": 0}, "journeys": dict()}
     allLoggedJourneys = []
+    liveJourneysDict = dict()
     for stationTuple in checkAtStations:
         logging.info(f"station {stationTuple[0]}")
-        loggedJourneys, liveJourneys = getAllDelaysThroughStation(*stationTuple, numResults=100)
-        allLiveJourneys["info"]["calculationTimeMs"]   += liveJourneys["info"]["calculationTimeMs"]
-        allLiveJourneys["info"]["responseTimestampUtc"] = liveJourneys["info"]["responseTimestamp"]
-        print("TODO, smart way to combine journeys across day boundary, otherwise one will get duplicates")
-        allLiveJourneys["journeys"]                    |= liveJourneys["journeys"]
-        #combine all logged journeys
-        allLoggedJourneys += loggedJourneys
+        allLoggedJourneys += getAllDelaysThroughStation(*stationTuple, liveJourneysDict, numResults=100)
     allLiveJourneys["info"]["attachedDataFormatRevision"] = "2026.02.26"
     allLiveJourneys["info"]["license"]                    = "DL-DE/BY-2-0"
     allLiveJourneys["info"]["rawDataSourceUrl"]           = "https://mobidata-bw.de/dataset/trias"
