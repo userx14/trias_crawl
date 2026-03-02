@@ -305,7 +305,7 @@ def getLiveJourney(serviceData, allStops, currentTime, liveJourneyDict):
     delay = delay.total_seconds()
     cancelled = False
     if processedStopList[currentStopIdx]["notServiced"]:
-        if not processedStopList[nextStopIdx]["intermediateNotServiced"]:
+        if not processedStopList[currentStopIdx]["intermediateNotServiced"]:
             cancelled = True
 
     #find next valid stop
