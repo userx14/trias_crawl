@@ -110,7 +110,7 @@ def analyze_data(callbackAnalysis, analysisDayStart, analysisDayEnd):
 
 
 #data visualization delay
-def update_stat_delay_map(analysisStartDay, analysisEndDay, out_dir):
+def update_stat_delay_map(analysisStartDay, analysisEndDay, outputFilePath):
     delaySectionDict = copy.deepcopy(linesStations)
     for lineStations in delaySectionDict.values():
         for station in lineStations:
@@ -161,13 +161,17 @@ def update_stat_delay_map(analysisStartDay, analysisEndDay, out_dir):
                 lineStations[stationIdx][2] = ratioNotServiced
                 listOfCircles.append(colorTrainStation(lineName, lineStations[stationIdx][0], lineStations[stationIdx][2], cmap))
     svgDict["svg"]["circle"] = listOfCircles
+    if analysisStartDay == analysisEndDay:
+        titleText = f"Durchschnittliche Verspätung am Halt, am {analysisStartDay.strftime('%d.%m.%Y')}"
+    else:
+        titleText = f"Durchschnittliche Verspätung am Halt, vom {analysisStartDay.strftime('%d.%m.%Y')} bis {analysisEndDay.strftime('%d.%m.%Y')}"
     for textElement in svgDict["svg"]["text"]:
         if textElement["@id"] == "title":
-            textElement["tspan"]["#text"] = f"Durchschnittliche Verspätung am Halt, vom {analysisStartDay.strftime('%d.%m.%Y')} bis {analysisEndDay.strftime('%d.%m.%Y')}"
-    with open(out_dir/"stat_map_delay.svg", "w") as outputSvg:
+            textElement["tspan"]["#text"] = titleText
+    with open(outputFilePath, "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict))
 
-def update_stat_notServiced_map(analysisStartDay, analysisEndDay, out_dir):
+def update_stat_notServiced_map(analysisStartDay, analysisEndDay, outputFilePath):
     notServicedSectionDict = copy.deepcopy(linesStations)
     for lineStations in notServicedSectionDict.values():
         for station in lineStations:
@@ -211,11 +215,15 @@ def update_stat_notServiced_map(analysisStartDay, analysisEndDay, out_dir):
                 lineStations[stationIdx][2] = ratioNotServiced
                 listOfCircles.append(colorTrainStation(lineName, lineStations[stationIdx][0], lineStations[stationIdx][2], cmap))
     svgDict["svg"]["circle"] = listOfCircles
+    if analysisStartDay == analysisEndDay:
+        titleText = f"Anteil ungeplant ausgefallener Halte, am {analysisStartDay.strftime('%d.%m.%Y')}"
+    else:
+        titleText = f"Anteil ungeplant ausgefallener Halte, vom {analysisStartDay.strftime('%d.%m.%Y')} bis {analysisEndDay.strftime('%d.%m.%Y')}"
     for textElement in svgDict["svg"]["text"]:
         if textElement["@id"] == "title":
-            textElement["tspan"]["#text"] = f"Anteil ungeplant ausgefallener Halte, vom {analysisStartDay.strftime('%d.%m.%Y')} bis {analysisEndDay.strftime('%d.%m.%Y')}"
+            textElement["tspan"]["#text"] = titleText
 
-    with open(out_dir/"stat_map_notServiced.svg", "w") as outputSvg:
+    with open(outputFilePath, "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict))
 
 #visualize_delay(datetime(2026,2,11,0,0,0), datetime(2026,2,15,0,0,0))

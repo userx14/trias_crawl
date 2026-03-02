@@ -268,21 +268,17 @@ def getLiveJourney(serviceData, allStops, currentTime, liveJourneyDict):
                 if processedStop["ttbDep"]:
                     processedStop["estDep"] = processedStop["ttbDep"] + delayAfter
             else:
-                print("ins data1")
-                logging.error("insufficient live data")
+                logging.debug("insufficient live data")
                 return 0
         else:
             if (processedStop["estArr"]) is None and (processedStop["estDep"] is None):
-                print("ins data2")
-                logging.error("nonexistent live data")
+                logging.debug("nonexistent live data")
                 return 0
 
-    if currentTime < processedStopList[-1]["estArr"]:
-        print("already end")
+    if processedStopList[-1]["estArr"] < currentTime:
         return 1 #train has already ended
 
-    if processedStopList[0]["ttbDep"] < currentTime:
-        print("not yet")
+    if currentTime < processedStopList[0]["ttbDep"]:
         return -1 #train has not yet started
 
     for currentStopIdx in range(len(processedStopList)-2, 0, -1): #exclude first stop
@@ -306,7 +302,7 @@ def getLiveJourney(serviceData, allStops, currentTime, liveJourneyDict):
         else:
             progressToNextStop = 0.0
         delay = processedStop["estDep"] - processedStop["ttbDep"]
-
+    delay = delay.total_seconds()
     cancelled = False
     if processedStopList[currentStopIdx]["notServiced"]:
         if not processedStopList[nextStopIdx]["intermediateNotServiced"]:
@@ -324,10 +320,10 @@ def getLiveJourney(serviceData, allStops, currentTime, liveJourneyDict):
         progressToNextStop = currentTime - processedStopList[currentStopIdx]["estDep"]
         progressToNextStop /= processedStopList[nextStopIdx]["estArr"] - processedStopList[currentStopIdx]["estDep"]
 
-    currentStopName = allStops[currentStopIdx]["StopPointName"]["Text"]
-    currentStopRef  = allStops[currentStopIdx]["StopPointRef"]
-    nextStopName    = allStops[nextStopIdx]["StopPointName"]["Text"]
-    nextStopRef     = allStops[nextStopIdx]["StopPointRef"]
+    currentStopName = allStops[currentStopIdx]["CallAtStop"]["StopPointName"]["Text"]
+    currentStopRef  = allStops[currentStopIdx]["CallAtStop"]["StopPointRef"]
+    nextStopName    = allStops[nextStopIdx]["CallAtStop"]["StopPointName"]["Text"]
+    nextStopRef     = allStops[nextStopIdx]["CallAtStop"]["StopPointRef"]
 
     if serviceData.get("Unplanned") == "true":
         logging.error("Unplanned train :)")
@@ -337,7 +333,7 @@ def getLiveJourney(serviceData, allStops, currentTime, liveJourneyDict):
     liveJourney = {
         "delay":            delay / 60,
         "lineName":         serviceData["ServiceSection"]["PublishedLineName"]["Text"],
-        "incidentText":     getIncidentText(serviceCallDict),
+        "incidentText":     getIncidentText(serviceData),
         "currentStopName":  currentStopName,
         "currentStopRef":   currentStopRef,
         "nextStopName":     nextStopName,
@@ -347,12 +343,11 @@ def getLiveJourney(serviceData, allStops, currentTime, liveJourneyDict):
         "progressNextStop": progressToNextStop,
         "cancelled":        cancelled
     }
-    print(liveJourney)
 
     trainJourneyRef  = serviceData["JourneyRef"]
-    operatingDayRef  = datetimeFromTriasDateStr(serviceData["OperatingDayRef"])
-    if not any([trainJourneyRef in iterRef for iterRef in liveJourneyList.keys()]): #block duplicating journey around midnight
-        liveJourneyDict[trainJourneyRef+":"+str(operatingDayRef)] = liveJourney
+    operatingDayRef  = datetimeFromTriasDateStr(serviceData["OperatingDayRef"]).strftime("%Y.%m.%d")
+    if not any([trainJourneyRef in iterRef for iterRef in liveJourneyDict.keys()]): #block duplicating journey around midnight
+        liveJourneyDict[trainJourneyRef+":"+operatingDayRef] = liveJourney
     return 0
 
 def acquireTrainLineFilter(lineName):
@@ -386,17 +381,10 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, liveJourne
     stopEventRequestPayload["Params"]["IncludeOnwardCalls"]            = "true"
     stopEventRequestPayload["Params"]["IncludeRealtimeData"]           = "true"
 
-
     stopEventResponse = sendRequest(stopEventRequest)
     responseTimestampStr, calculationTimeMs = getResponseStatistics(stopEventResponse)
-    if "info" not in liveJourneysDict.keys():
-        liveJourneysDict["info"] = {
-            "responseTimestamp": responseTimestampStr,
-            "calculationTimeMs": calculationTimeMs,
-        }
-    else:
-        liveJourneysDict["info"]["responseTimestamp"] = responseTimestampStr
-        liveJourneysDict["info"]["calculationTimeMs"] += calculationTimeMs
+    liveJourneysDict["info"]["responseTimestamp"] = responseTimestampStr
+    liveJourneysDict["info"]["calculationTimeMs"] += calculationTimeMs
 
     serviceDelivery = stopEventResponse["Trias"]["ServiceDelivery"]
     
@@ -429,14 +417,14 @@ def getAllDelaysThroughStation(passingThroughName, passingThroughRef, liveJourne
             elif isinstance(stopOrStopsList, list):
                 allStops.extend(stopOrStopsList)
 
-        compRes = getLiveJourney(serviceData, allStops, currentTime, liveJourneys)
+        compRes = getLiveJourney(serviceData, allStops, currentTime, liveJourneysDict["journeys"])
         if compRes < 0:
             toEarly += 1
-            logJourn = logJourney(serviceData, allStops)
-            loggedJourneys.append(logJourn)
             continue
         if compRes > 0:
             toLate += 1
+            logJourn = logJourney(serviceData, allStops)
+            loggedJourneys.append(logJourn)
             continue
     return loggedJourneys
 
@@ -532,12 +520,11 @@ def getCurrentRunningTrains():
         ('Esslingen (Neckar)', 'de:08116:7800'),
     ]
 
-    allLiveJourneys = {"info": {"calculationTimeMs": 0}, "journeys": dict()}
+    allLiveJourneys = {"info": {"calculationTimeMs": 0, "responseTimestamp": None}, "journeys": dict()}
     allLoggedJourneys = []
-    liveJourneysDict = dict()
     for stationTuple in checkAtStations:
         logging.info(f"station {stationTuple[0]}")
-        allLoggedJourneys += getAllDelaysThroughStation(*stationTuple, liveJourneysDict, numResults=100)
+        allLoggedJourneys += getAllDelaysThroughStation(*stationTuple, allLiveJourneys, numResults=100)
     allLiveJourneys["info"]["attachedDataFormatRevision"] = "2026.02.26"
     allLiveJourneys["info"]["license"]                    = "DL-DE/BY-2-0"
     allLiveJourneys["info"]["rawDataSourceUrl"]           = "https://mobidata-bw.de/dataset/trias"
@@ -558,19 +545,39 @@ try:
     #render livemap
     www_dir = base_dir/'www'
     try:
-        from visualize_liveMap import update_live_map
-        update_live_map(www_dir)
+        from visualize_liveMap import render_liveMap
+        render_liveMap(www_dir/"currentRunningTrains.json", base_dir/"live_map_source.svg", www_dir/"live_map.svg")
     except Exception as e:
         logging.exception("Failed to update live map")
 
-    #render statmap
+    #render statmap for this week
+    try:
+        current_utc = datetime.now(timezone.utc)
+        analysisEndDay = current_utc
+        analysisStartDay = current_utc - timedelta(days=0)
+        from visualize_statMap import update_stat_delay_map, update_stat_notServiced_map
+        update_stat_delay_map(analysisStartDay, analysisEndDay, www_dir/"stat_map_delay_today.svg")
+        update_stat_notServiced_map(analysisStartDay, analysisEndDay, www_dir/"stat_map_notServiced_today.svg")
+    except Exception as e:
+        logging.exception("Failed to update stat map for today")
+
+    try:
+        current_utc = datetime.now(timezone.utc)
+        analysisEndDay = current_utc - timedelta(days=1)
+        analysisStartDay = current_utc - timedelta(days=1)
+        from visualize_statMap import update_stat_delay_map, update_stat_notServiced_map
+        update_stat_delay_map(analysisStartDay, analysisEndDay, www_dir/"stat_map_delay_yesterday.svg")
+        update_stat_notServiced_map(analysisStartDay, analysisEndDay, www_dir/"stat_map_notServiced_yesterday.svg")
+    except Exception as e:
+        logging.exception("Failed to update stat map for yesterday")
+
     try:
         current_utc = datetime.now(timezone.utc)
         analysisEndDay = current_utc
         analysisStartDay = current_utc - timedelta(days=7)
         from visualize_statMap import update_stat_delay_map, update_stat_notServiced_map
-        update_stat_delay_map(analysisStartDay, analysisEndDay, www_dir)
-        update_stat_notServiced_map(analysisStartDay, analysisEndDay, www_dir)
+        update_stat_delay_map(analysisStartDay, analysisEndDay, www_dir/"stat_map_delay_week.svg")
+        update_stat_notServiced_map(analysisStartDay, analysisEndDay, www_dir/"stat_map_notServiced_week.svg")
     except Exception as e:
         logging.exception("Failed to update stat map")
 

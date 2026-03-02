@@ -5,6 +5,7 @@ from datetime            import datetime
 from lineStations        import linesStations
 import math, json, xmltodict, logging
 
+dataFormatRevision = "2026.02.26"
 segmBetweenStops = 3
 
 def changeMapTitle(svgDict, newTitle):
@@ -154,7 +155,11 @@ def render_liveMap(inputDataJsonPath, inputSvgPath, outputSvgPath):
     title += str(datetime.now().strftime('%d.%m.%Y %H:%M:%S'))
     changeMapTitle(svgDict, title)
     with open(inputDataJsonPath) as inputfile:
-        runningTrainsDict = json.loads(inputfile.read())["journeys"]
+        jsonData = json.loads(inputfile.read())
+        if jsonData["info"]["attachedDataFormatRevision"] != dataFormatRevision:
+            logging.error("incompatible json data file version")
+            return
+        runningTrainsDict = jsonData["journeys"]
     placeTrains(svgDict, linesPathDict, trainIconDict, runningTrainsDict.values())
     with open(outputSvgPath, "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict))
