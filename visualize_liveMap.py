@@ -12,14 +12,19 @@ def changeMapTitle(svgDict, newTitle):
     if isinstance(svgDict["svg"]["text"], list):
         for textElement in svgDict["svg"]["text"]:
             if textElement["@id"] == "title":
-                textElement["tspan"]["#text"] = newTitle
+                textElement["#text"] = newTitle
+                break
+        else:
+            logging.error("could not locate map title")
+    elif "@id" in svgDict["svg"]["text"].keys() and svgDict["svg"]["text"]["@id"] == "title":
+        svgDict["svg"]["text"]["#text"] = newTitle
     else:
-        svgDict["svg"]["text"]["tspan"]["#text"] = newTitle
+        logging.error("could not locate map title")
 
 def parseSvg(inputSvgPath):
     with open(inputSvgPath, "r") as inputSvg:
         svgFile = inputSvg.read()
-    svgDict = xmltodict.parse(svgFile)
+    svgDict = xmltodict.parse(svgFile, force_list=["g", "path", "text"])
     trainIconIds  = ["delay0", "delay3", "delay6", "delay15"]
     trainIconDict = dict()
     lineIds       = ["S1", "S2", "S3", "S4", "S5", "S6", "S60", "S62"]
@@ -32,7 +37,11 @@ def parseSvg(inputSvgPath):
         if pathId in lineIds:
             linesPathDict[pathId] = path
     for group in svgDict["svg"]["g"]: #in paths that are grouped
+        if "path" not in group.keys():
+            continue
         for path in group["path"]:
+            if "@id" not in path.keys():
+                continue
             pathId = path["@id"]
             if pathId in trainIconIds:
                 trainIconDict[pathId]  = path
@@ -143,10 +152,18 @@ def placeTrains(svgDict, linesPathDict, trainIconDict, runningTrains):
         lineName, cStatIdx, nStatIdx = getStopIndices(trainData, linesPathDict)
         if lineName is None:
             continue
-        delay                        = trainData["delay"]
-        progress                     = trainData["progressNextStop"]
-        trainPos, angle              = getPosAngleFromPath(lineName, linesPathDict, cStatIdx, nStatIdx, progress)
-        trainIcon                    = getTrainIcon(trainIconDict, delay, trainPos, angle)
+        delay           = trainData["delay"]
+        progress        = trainData["progressNextStop"]
+        trainPos, angle = getPosAngleFromPath(lineName, linesPathDict, cStatIdx, nStatIdx, progress)
+        trainIcon       = getTrainIcon(trainIconDict, delay, trainPos, angle)
+
+        onHoverTooltip  = trainData["lineName"] + " von " + trainData["origin"]
+        onHoverTooltip += " nach " + trainData["destination"] + "\n"
+        onHoverTooltip += "Verspätung: " + str(int(trainData["delay"])) + " min" + "\n"
+        if trainData["incidentText"] is not None:
+            onHoverTooltip += "Grund: " + str(trainData["incidentText"])
+        trainIcon["title"] = onHoverTooltip
+
         svgDict["svg"]["path"].append(trainIcon)
 
 def render_liveMap(inputDataJsonPath, inputSvgPath, outputSvgPath):
@@ -162,7 +179,7 @@ def render_liveMap(inputDataJsonPath, inputSvgPath, outputSvgPath):
         runningTrainsDict = jsonData["journeys"]
     placeTrains(svgDict, linesPathDict, trainIconDict, runningTrainsDict.values())
     with open(outputSvgPath, "w") as outputSvg:
-        outputSvg.write(xmltodict.unparse(svgDict))
+        outputSvg.write(xmltodict.unparse(svgDict, pretty=True))
 
 if __name__ == "__main__":
-    render_liveMap("./currentRunningTrains.json", "./live_map_source.svg", "live_map.svg")
+    render_liveMap("./currentRunningTrains.json", "./svg_source/live_map_source_dark_linecolor.svg", "live_map.svg")
