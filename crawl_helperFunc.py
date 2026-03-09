@@ -1,29 +1,6 @@
 import triasApi
 import logging
 
-def acquireTrainLineFilter(lineName):
-    if "S" == lineName[0]:
-        return True
-    return False
-
-def combineAndFixStops(stopEvent):
-    allStopsUnfiltered = []
-    for callCat in ["PreviousCall", "ThisCall", "OnwardCall"]:
-        stopOrStopsList = stopEvent["StopEvent"].get(callCat)
-        if stopOrStopsList is not None:
-            allStopsUnfiltered.extend(stopOrStopsList)
-
-    #remove stops with identical stopPointRef, and fix indices
-    duplicateCount = 0
-    allStops = [allStopsUnfiltered[0]]
-    for stopIdx in range(1, len(allStopsUnfiltered)):
-        if allStopsUnfiltered[stopIdx]["CallAtStop"]["StopPointRef"] == allStops[-1]["CallAtStop"]["StopPointRef"]:
-            duplicateCount += 1
-            continue
-        allStops.append(allStopsUnfiltered[stopIdx])
-        seqNr = int(allStops[-1]["CallAtStop"]["StopSeqNumber"])
-        allStops[-1]["CallAtStop"]["StopSeqNumber"] = str(seqNr - duplicateCount)
-    return allStops
 
 def extrapolateStopsWithClosestDelay(allStops):
     #make delayList
@@ -86,17 +63,6 @@ def extrapolateStopsWithClosestDelay(allStops):
                 return None
     return extrapolatedStops
 
-def getIncidentText(serviceData):
-    incidentText = None
-    attributes = serviceData.get("Attribute")
-    if attributes:
-        for att in attributes:
-            if "Incident" in att["Code"]:
-                if incidentText is not None:
-                    logging.error(f'multiple incident messages {incidentText}, {att["Text"]["Text"]}')
-                incidentText = att["Text"]["Text"]
-    return incidentText
-
 def hasAnyRealtimeData(allStops):
     for stop in allStops:
         thisCall = stop["CallAtStop"]
@@ -105,25 +71,6 @@ def hasAnyRealtimeData(allStops):
             return True
     return False
 
-
-def getArrAndDepTimes(thisCall):
-    ttbArr = None
-    estArr = None
-    ttbDep = None
-    estDep = None
-    arrivalDict = thisCall.get("ServiceArrival")
-    if arrivalDict is not None:
-        ttbArr  = triasApi.datetimeFromTriasDatetimeStr(arrivalDict["TimetabledTime"])
-        logging.debug(f"arriveTT: {ttbArr}")
-        estArr  = triasApi.datetimeFromTriasDatetimeStr(arrivalDict.get("EstimatedTime"))
-        logging.debug(f"arriveES: {estArr}")
-    departureDict = thisCall.get("ServiceDeparture")
-    if departureDict is not None:
-        ttbDep  = triasApi.datetimeFromTriasDatetimeStr(departureDict["TimetabledTime"])
-        logging.debug(f"departTT: {ttbDep}")
-        estDep  = triasApi.datetimeFromTriasDatetimeStr(departureDict.get("EstimatedTime"))
-        logging.debug(f"departES: {estArr}")
-    return ttbArr, estArr, ttbDep, estDep
 
 def copy_www_to_webhost(local_path, remote_path = 'bwp@p0ng.de:/var/www/html/trias/'):
     for src_path in local_path.iterdir():
