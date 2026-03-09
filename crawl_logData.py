@@ -7,6 +7,7 @@ import subprocess
 import traceback
 
 import triasApi
+import crawl_helperFunc
 
 base_dir      = Path(__file__).parent
 triasApi.requestorKey = open(base_dir/"requestor.key").read()
@@ -22,34 +23,13 @@ logging.basicConfig(
     format='%(asctime)s %(levelname)s %(message)s'
 )
 """
-def delaySeconds_from_serviceCall(serviceCallDict):
-    if serviceCallDict is None:
-        return None
-    timetableTime = datetimeFromTriasDatetimeStr(serviceCallDict.get("TimetabledTime"))
-    estimatedTime = datetimeFromTriasDatetimeStr(serviceCallDict.get("EstimatedTime"))
-    if timetableTime is None or estimatedTime is None:
-        return None
-    return (estimatedTime - timetableTime).total_seconds()
-
-def getIncidentText(serviceData):
-    incidentText = None
-    attributes = serviceData.get("Attribute")
-    if attributes:
-        #if there is only a single attribute, make it a list so the following code can correctely handle it
-        attributes = attributes if isinstance(attributes, list) else [attributes]
-        for att in attributes:
-            if "Incident" in att["Code"]:
-                if incidentText is not None:
-                    logging.error(f'multiple incident messages {incidentText}, {att["Text"]["Text"]}')
-                incidentText = att["Text"]["Text"]
-    return incidentText
 
 def logJourney(serviceData, allStops): #convert this journey into a compressed form for statistics db
     operatingDayRef = triasApi.datetimeFromTriasDateStr(serviceData["OperatingDayRef"])
     processedStopsList = []
     for stop in allStops:
         thisCall       = stop["CallAtStop"]
-        ttbArr, estArr, ttbDep, estDep = triasApi.getArrAndDepTimes(thisCall)
+        ttbArr, estArr, ttbDep, estDep = crawl_helperFunc.getArrAndDepTimes(thisCall)
         processedStopsList.append({
             "journeyRef":          serviceData["JourneyRef"],
             "operatingDay":        operatingDayRef.timestamp(),
@@ -68,7 +48,7 @@ def logJourney(serviceData, allStops): #convert this journey into a compressed f
         "trainLineName":        serviceData["ServiceSection"]["PublishedLineName"]["Text"],
         "trainDestination":     serviceData["DestinationText"]["Text"],
         "trainOrigin":          serviceData["OriginText"]["Text"],
-        "trainIncidentMessage": triasApi.getIncidentText(serviceData),
+        "trainIncidentMessage": crawl_helperFunc.getIncidentText(serviceData),
         "isCancelled":          (serviceData.get("Cancelled") == "true"),
         "isUnplanned":          (serviceData.get("Unplanned") == "true"),
         "isDeviated":           (serviceData.get("Deviation") == "true"),
@@ -146,19 +126,6 @@ def insertJourneysInDb(journeys):
     connection.commit()
     connection.close()
 
-def copy_www_to_webhost(local_path, remote_path = 'bwp@p0ng.de:/var/www/html/trias/'):
-    for src_path in local_path.iterdir():
-        scp_command = ['/run/current-system/sw/bin/scp', src_path, remote_path]
-        try:
-            subprocess.run(scp_command, check=True)
-        except subprocess.CalledProcessError as e:
-            logging.error(f"Error during file copy: {e}")
-
-def acquireTrainLineFilter(lineName):
-    if "S" in lineName:
-        return True
-    return False
-
 def logFinishedJourneys():
     currentTime = datetime.now().astimezone()
 
@@ -183,18 +150,18 @@ def logFinishedJourneys():
             try:
                 serviceData      = stopEvent["StopEvent"]["Service"]
                 trainLine        = serviceData["ServiceSection"]["PublishedLineName"]["Text"]
-                if not acquireTrainLineFilter(trainLine):
+                if not crawl_helperFunc.acquireTrainLineFilter(trainLine):
                     continue
                 trainJourney     = serviceData["JourneyRef"]
                 trainOrigin      = serviceData["OriginText"]["Text"]
                 trainDestination = serviceData["DestinationText"]["Text"]
                 logging.debug(f"{trainLine} ({trainJourney}) from {trainOrigin} to {trainDestination}")
 
-                allStops          = triasApi.combineAndFixStops(stopEvent)
-                if not triasApi.hasAnyRealtimeData(allStops):
+                allStops          = crawl_helperFunc.combineAndFixStops(stopEvent)
+                if not crawl_helperFunc.hasAnyRealtimeData(allStops):
                     continue
 
-                extrapolatedStops = triasApi.extrapolateStopsWithClosestDelay(allStops)
+                extrapolatedStops = crawl_helperFunc.extrapolateStopsWithClosestDelay(allStops)
                 if extrapolatedStops is None:
                     continue
 
@@ -249,7 +216,7 @@ def main():
 
     #upload
     try:
-        copy_www_to_webhost(www_dir)
+        crawl_helperFunc.copy_www_to_webhost(www_dir)
     except Exception as e:
         logging.exception("Failed to upload to server")
 

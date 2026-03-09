@@ -182,4 +182,4 @@ def render_liveMap(inputDataJsonPath, inputSvgPath, outputSvgPath):
         outputSvg.write(xmltodict.unparse(svgDict, pretty=True))
 
 if __name__ == "__main__":
-    render_liveMap("./currentRunningTrains.json", "./svg_source/live_map_source_dark_linecolor.svg", "live_map.svg")
+    render_liveMap("./currentRunningTrains.json", "./svg_source/live_map_source_bright.svg", "live_map.svg")

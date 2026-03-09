@@ -7,18 +7,19 @@ import traceback
 import xmltodict
 
 import triasApi
+import crawl_helperFunc
 
 base_dir      = Path(__file__).parent
 
 triasApi.requestorKey = open(base_dir/"requestor.key").read()
 logging.basicConfig(
-    filename=base_dir/"error.log",
+    #filename=base_dir/"error.log",
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(message)s'
 )
 
-def getLiveJourney(serviceData, allStops, extrapolatedStops, currentTime, liveJourneyDict):
-    for currentStopIdx in range(len(extrapolatedStops)-2, 0, -1): #exclude first stop
+def getLiveJourney(serviceData, allStops, extrapolatedStops, currentTime, outputDict):
+    for currentStopIdx in range(len(extrapolatedStops)-2, 0, -1): #exclude first and last stop
         processedStop = extrapolatedStops[currentStopIdx]
         if processedStop["estDep"] < currentTime:
             #train left this station and is on the way to the next
@@ -34,7 +35,7 @@ def getLiveJourney(serviceData, allStops, extrapolatedStops, currentTime, liveJo
             break
     else:
         if processedStop["estDep"] < currentTime:
-            #train left this station and is on the way to the next
+            #train left first station and is on the way to the next
             progressToNextStop = None #still needs to be calculated
         else:
             progressToNextStop = 0.0
@@ -54,7 +55,12 @@ def getLiveJourney(serviceData, allStops, extrapolatedStops, currentTime, liveJo
         break
     if progressToNextStop is None:
         progressToNextStop = currentTime - extrapolatedStops[currentStopIdx]["estDep"]
-        progressToNextStop /= extrapolatedStops[nextStopIdx]["estArr"] - extrapolatedStops[currentStopIdx]["estDep"]
+        timeBetweenStops   = extrapolatedStops[nextStopIdx]["estArr"] - extrapolatedStops[currentStopIdx]["estDep"]
+        if timeBetweenStops == 0:
+            logging.warning("zero travel time between stops")
+            progressToNextStop = 0.0
+        else:
+            progressToNextStop /= timeBetweenStops
 
     currentStopName = allStops[currentStopIdx]["CallAtStop"]["StopPointName"]["Text"]
     currentStopRef  = allStops[currentStopIdx]["CallAtStop"]["StopPointRef"]
@@ -62,14 +68,14 @@ def getLiveJourney(serviceData, allStops, extrapolatedStops, currentTime, liveJo
     nextStopRef     = allStops[nextStopIdx]["CallAtStop"]["StopPointRef"]
 
     if serviceData.get("Unplanned") == "true":
-        logging.error("Unplanned train :)")
+        logging.warning("Unplanned train")
     if serviceData.get("Deviation") == "true":
-        logging.error("Deviated train :)")
+        logging.warning("Deviated train")
 
     liveJourney = {
         "delay":            delay / 60,
         "lineName":         serviceData["ServiceSection"]["PublishedLineName"]["Text"],
-        "incidentText":     triasApi.getIncidentText(serviceData),
+        "incidentText":     crawl_helperFunc.getIncidentText(serviceData),
         "currentStopName":  currentStopName,
         "currentStopRef":   currentStopRef,
         "nextStopName":     nextStopName,
@@ -81,14 +87,7 @@ def getLiveJourney(serviceData, allStops, extrapolatedStops, currentTime, liveJo
     }
 
     trainJourneyRef  = serviceData["JourneyRef"]
-    operatingDayRef  = triasApi.datetimeFromTriasDateStr(serviceData["OperatingDayRef"]).strftime("%Y.%m.%d")
-    if not any([trainJourneyRef in iterRef for iterRef in liveJourneyDict.keys()]): #block duplicating journey around midnight
-        liveJourneyDict[trainJourneyRef+":"+operatingDayRef] = liveJourney
-
-def acquireTrainLineFilter(lineName):
-    if "S" in lineName:
-        return True
-    return False
+    outputDict["journeys"][trainJourneyRef] = liveJourney
 
 
 def getAllDelaysThroughStation(stationName, stationRef, liveJourneysDict):
@@ -111,20 +110,21 @@ def getAllDelaysThroughStation(stationName, stationRef, liveJourneysDict):
         try:
             serviceData      = stopEvent["StopEvent"]["Service"]
             trainLine        = serviceData["ServiceSection"]["PublishedLineName"]["Text"]
-            if not acquireTrainLineFilter(trainLine):
+            if not crawler_helperFunc.acquireTrainLineFilter(trainLine):
                 continue
             trainJourney     = serviceData["JourneyRef"]
             trainOrigin      = serviceData["OriginText"]["Text"]
             trainDestination = serviceData["DestinationText"]["Text"]
             logging.debug(f"{trainLine} ({trainJourney}) from {trainOrigin} to {trainDestination}")
 
-            allStops = triasApi.combineAndFixStops(stopEvent)
-            if not triasApi.hasAnyRealtimeData(allStops):
+            allStops = crawl_helperFunc.combineAndFixStops(stopEvent)
+            if not crawl_helperFunc.hasAnyRealtimeData(allStops):
                 noData += 1
                 continue
 
-            extrapolatedStops = triasApi.extrapolateStopsWithClosestDelay(allStops)
+            extrapolatedStops = crawl_helperFunc.extrapolateStopsWithClosestDelay(allStops)
             if extrapolatedStops is None:
+                error += 1
                 continue
 
             #check if the journey has already started
@@ -137,23 +137,17 @@ def getAllDelaysThroughStation(stationName, stationRef, liveJourneysDict):
                 toLate += 1
                 continue
 
-            getLiveJourney(serviceData, allStops, extrapolatedStops, currentTime, liveJourneysDict["journeys"])
+            getLiveJourney(serviceData, allStops, extrapolatedStops, currentTime, liveJourneysDict)
             good += 1
         except Exception as e:
             error += 1
             logging.error(traceback.format_exc())
     logging.info(f"statistic for {stationName}: good: {good}, early: {toEarly}, late: {toLate}, no data: {noData}, error: {error}")
 
-def copy_www_to_webhost(local_path, remote_path = 'bwp@p0ng.de:/var/www/html/trias/'):
-    for src_path in local_path.iterdir():
-        scp_command = ['/run/current-system/sw/bin/scp', src_path, remote_path]
-        try:
-            subprocess.run(scp_command, check=True)
-        except subprocess.CalledProcessError as e:
-            logging.error(f"Error during file copy: {e}")
 
-def getCurrentRunningTrains():
-    checkAtStations = [
+def main():
+    #get trias data
+    queryStationList = [
         ('Zuffenhausen',       'de:08111:6465'),
         ('Vaihingen',          'de:08111:6002'),
         ('Ludwigsburg',        'de:08118:7402'),
@@ -165,39 +159,39 @@ def getCurrentRunningTrains():
         ('Esslingen (Neckar)', 'de:08116:7800'),
     ]
 
-    allLiveJourneys = {"info": {"calculationTimeMs": 0, "responseTimestamp": None}, "journeys": dict()}
-    for stationTuple in checkAtStations:
+    allLiveJourneys = {
+        "info": {
+            "calculationTimeMs":          0,
+            "responseTimestamp":          None,
+            "attachedDataFormatRevision": "2026.02.26",
+            "license":                    "DL-DE/BY-2-0",
+            "rawDataSourceUrl":           "https://mobidata-bw.de/dataset/trias",
+        },
+        "journeys": dict(),
+    }
+
+    for stationTuple in queryStationList:
         logging.info(f"station {stationTuple[0]}")
         getAllDelaysThroughStation(*stationTuple, allLiveJourneys)
-    allLiveJourneys["info"]["attachedDataFormatRevision"] = "2026.02.26"
-    allLiveJourneys["info"]["license"]                    = "DL-DE/BY-2-0"
-    allLiveJourneys["info"]["rawDataSourceUrl"]           = "https://mobidata-bw.de/dataset/trias"
-    allLiveJourneys = dict(sorted(allLiveJourneys.items()))
-    return allLiveJourneys
 
-def main():
+    #write live data into json
+    with open(base_dir/"www/currentRunningTrains.json", "w") as outputfile:
+        outputfile.write(json.dumps(allLiveJourneys, indent=4))
+
+    #render livemap
+    www_dir = base_dir/'www'
     try:
-        #get trias data
-        allLiveJourneys = getCurrentRunningTrains()
+        from visualize_liveMap import render_liveMap
+        render_liveMap(www_dir/"currentRunningTrains.json", base_dir/"svg_source"/"live_map_source_light.svg", www_dir/"live_map.svg")
+    except Exception as e:
+        logging.exception("Failed to update live map")
 
-        #write live data into json
-        with open(base_dir/"www/currentRunningTrains.json", "w") as outputfile:
-            outputfile.write(json.dumps(allLiveJourneys, indent=4))
+    #upload
+    crawl_helperFunc.copy_www_to_webhost(www_dir)
 
-        #render livemap
-        www_dir = base_dir/'www'
-        try:
-            from visualize_liveMap import render_liveMap
-            render_liveMap(www_dir/"currentRunningTrains.json", base_dir/"svg_source"/"live_map_source_light.svg", www_dir/"live_map.svg")
-        except Exception as e:
-            logging.exception("Failed to update live map")
-
-        #upload
-        copy_www_to_webhost(www_dir)
+if __name__ == "__main__":
+    try:
+        main()
     except Exception:
         logging.error("Unhandled exception:\n%s", traceback.format_exc())
         raise
-
-
-if __name__ == "__main__":
-    main()
