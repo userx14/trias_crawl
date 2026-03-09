@@ -11,7 +11,6 @@ import triasApi
 base_dir      = Path(__file__).parent
 
 triasApi.requestorKey = open(base_dir/"requestor.key").read()
-
 logging.basicConfig(
     filename=base_dir/"error.log",
     level=logging.INFO,
@@ -91,99 +90,12 @@ def acquireTrainLineFilter(lineName):
         return True
     return False
 
-def combineAllStops(stopEvent):
-    allStopsUnfiltered = []
-    for callCat in ["PreviousCall", "ThisCall", "OnwardCall"]:
-        stopOrStopsList = stopEvent["StopEvent"].get(callCat)
-        if stopOrStopsList is not None:
-            allStopsUnfiltered.extend(stopOrStopsList)
-
-    #remove stops with identical stopPointRef, and fix indices
-    duplicateCount = 0
-    allStops = [allStopsUnfiltered[0]]
-    for stopIdx in range(1, len(allStopsUnfiltered)):
-        if allStopsUnfiltered[stopIdx]["CallAtStop"]["StopPointRef"] == allStops[-1]["CallAtStop"]["StopPointRef"]:
-            duplicateCount += 1
-            continue
-        allStops.append(allStopsUnfiltered[stopIdx])
-        seqNr = int(allStops[-1]["CallAtStop"]["StopSeqNumber"])
-        allStops[-1]["CallAtStop"]["StopSeqNumber"] = str(seqNr - duplicateCount)
-    return allStops
-
-def fillInEstimates(allStops):
-    #make delayList
-    extrapolatedStops = []
-    for stop in allStops:
-        thisCall = stop["CallAtStop"]
-        ttbArr, estArr, ttbDep, estDep = triasApi.getArrAndDepTimes(thisCall)
-        extrapolatedStops.append({
-            "estArr":      estArr,
-            "ttbArr":      ttbArr,
-            "estDep":      estDep,
-            "ttbDep":      ttbDep,
-            "notServiced": (thisCall.get("NotServicedStop") == "true"),
-        })
-
-    #fill out non serviced stops
-    for stopIdx in range(len(extrapolatedStops)):
-        processedStop = extrapolatedStops[stopIdx]
-        if processedStop["notServiced"]:
-            #try to find realtime data before current stop
-            for beforeStopIdx in range(stopIdx-1,-1,-1):
-                estDep = extrapolatedStops[beforeStopIdx]["estDep"]
-                if estDep is None:
-                    continue
-                ttbDep = extrapolatedStops[beforeStopIdx]["ttbDep"]
-                delayBefore = (estDep - ttbDep)
-                break
-            else:
-                delayBefore = None
-
-            #try to find realtime data after current stop
-            for afterStopIdx in range(stopIdx+1, len(extrapolatedStops)):
-                estArr = extrapolatedStops[afterStopIdx]["estArr"]
-                if estArr is None:
-                    continue
-                ttbArr = extrapolatedStops[afterStopIdx]["ttbArr"]
-                delayAfter = (estArr - ttbArr)
-            else:
-                delayAfter = None
-
-            if (delayBefore is not None) and (delayAfter is not None):
-                processedStop["intermediateNotServiced"] = True
-            else:
-                processedStop["intermediateNotServiced"] = False
-
-            if delayBefore is not None:
-                if processedStop["ttbArr"]:
-                    processedStop["estArr"] = processedStop["ttbArr"] + delayBefore
-                if processedStop["ttbDep"]:
-                    processedStop["estDep"] = processedStop["ttbDep"] + delayBefore
-            elif delayAfter is not None:
-                if processedStop["ttbArr"]:
-                    processedStop["estArr"] = processedStop["ttbArr"] + delayAfter
-                if processedStop["ttbDep"]:
-                    processedStop["estDep"] = processedStop["ttbDep"] + delayAfter
-            else:
-                raise ValueError("missing live data")
-        else:
-            if (processedStop["estArr"]) is None and (processedStop["estDep"] is None):
-                raise ValueError("missing live data")
-    return extrapolatedStops
-
-def hasAnyLiveData(allStops):
-    for stop in allStops:
-        thisCall = stop["CallAtStop"]
-        ttbArr, estArr, ttbDep, estDep = triasApi.getArrAndDepTimes(thisCall)
-        if (estArr is not None) or (estDep is not None):
-            return True
-    return False
-
-
 
 def getAllDelaysThroughStation(stationName, stationRef, liveJourneysDict):
     stopEventResponse = triasApi.getStopEvents(stationName, stationRef, numResults=100)
     responseTimestampStr, calculationTimeMs = triasApi.getResponseStatistics(stopEventResponse)
+
+    currentTime = datetime.now().astimezone()
 
     liveJourneysDict["info"]["responseTimestamp"] = responseTimestampStr
     liveJourneysDict["info"]["calculationTimeMs"] += calculationTimeMs
@@ -206,20 +118,21 @@ def getAllDelaysThroughStation(stationName, stationRef, liveJourneysDict):
             trainDestination = serviceData["DestinationText"]["Text"]
             logging.debug(f"{trainLine} ({trainJourney}) from {trainOrigin} to {trainDestination}")
 
-            #check if the journey has already started
-            allStops          = combineAllStops(stopEvent)
-            journeyStartTime  = arrivalDictallStops[-1]["ServiceDeparture"]["TimetabledTime"]
-            journeyStartTime  = triasApi.datetimeFromTriasDatetimeStr(journeyStartTime)
-            if currentTime < journeyStartTime:
-                toEarly += 1
-                continue
-
-            if not hasAnyLiveData(allStops):
+            allStops = triasApi.combineAndFixStops(stopEvent)
+            if not triasApi.hasAnyRealtimeData(allStops):
                 noData += 1
                 continue
 
+            extrapolatedStops = triasApi.extrapolateStopsWithClosestDelay(allStops)
+            if extrapolatedStops is None:
+                continue
+
+            #check if the journey has already started
+            if currentTime < extrapolatedStops[0]["ttbDep"]:
+                toEarly += 1
+                continue
+
             #check if the journey has already ended
-            extrapolatedStops = fillInEstimates(allStops)
             if extrapolatedStops[-1]["estArr"] < currentTime:
                 toLate += 1
                 continue
@@ -229,7 +142,7 @@ def getAllDelaysThroughStation(stationName, stationRef, liveJourneysDict):
         except Exception as e:
             error += 1
             logging.error(traceback.format_exc())
-    logging.info(f"statistic for {passingThroughName}: good: {good}, early: {toEarly}, late: {toLate}, no data: {noData}, error: {error}")
+    logging.info(f"statistic for {stationName}: good: {good}, early: {toEarly}, late: {toLate}, no data: {noData}, error: {error}")
 
 def copy_www_to_webhost(local_path, remote_path = 'bwp@p0ng.de:/var/www/html/trias/'):
     for src_path in local_path.iterdir():
