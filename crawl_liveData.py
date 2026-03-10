@@ -1,6 +1,7 @@
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, asdict
 from pathlib import Path
+from copy import deepcopy
 import logging
 import json
 import subprocess
@@ -10,7 +11,7 @@ import datetime
 import triasApi
 import crawl_helperFunc
 
-@dataclasses.dataclass
+@dataclass
 class Stop:
     stopPointName: str
     stopPointRef: str
@@ -23,25 +24,31 @@ class Stop:
 
     def __init__(self, stopCall, stopIndexOffset = 0):
         self.stopPointName = stopCall["StopPointName"]["Text"]
-        self.stopPointRef = thisCall["StopPointRef"]
-        self.stopIndex = int(thisCall["StopSeqNumber"]) + stopIndexOffset
+        self.stopPointRef = stopCall["StopPointRef"]
+        self.stopIndex = int(stopCall["StopSeqNumber"]) + stopIndexOffset
 
         arrival = stopCall.get("ServiceArrival")
         if arrival is not None:
             self.arrivalTimetable = triasApi.datetimeFromTriasDatetimeStr(arrival["TimetabledTime"])
-            self.arrivalEstimate = arrival.get("EstimatedTime")
-            self.arrivalEstimate = triasApi.datetimeFromTriasDatetimeStr(self.arrivalEstimate)
+            self.arrivalEstimate  = arrival.get("EstimatedTime")
+            self.arrivalEstimate  = triasApi.datetimeFromTriasDatetimeStr(self.arrivalEstimate)
+        else:
+            self.arrivalTimetable = None
+            self.arrivalEstimate  = None
 
         departure = stopCall.get("ServiceDeparture")
         if departure is not None:
             self.departureTimetable = triasApi.datetimeFromTriasDatetimeStr(departure["TimetabledTime"])
-            self.departureEstimate = departure.get("EstimatedTime")
-            self.departureEstimate = triasApi.datetimeFromTriasDatetimeStr(self.departureEstimate)
+            self.departureEstimate  = departure.get("EstimatedTime")
+            self.departureEstimate  = triasApi.datetimeFromTriasDatetimeStr(self.departureEstimate)
+        else:
+            self.departureTimetable = None
+            self.departureEstimate  = None
 
-        self.isNotServiced = (thisCall.get("NotServicedStop") == "true")
+        self.isNotServiced = (stopCall.get("NotServicedStop") == "true")
 
 
-@dataclasses.dataclass
+@dataclass
 class Journey:
     journeyRef:   str
     operatingDay: datetime.datetime
@@ -52,7 +59,7 @@ class Journey:
     isCancelled:  bool
     isUnplanned:  bool
     isDeviated:   bool
-    stops:        List[Stop]
+    stops:        list[Stop]
 
     def __init__(self, stopEvent):
         serviceData      = stopEvent["StopEvent"]["Service"]
@@ -62,13 +69,15 @@ class Journey:
         self.destination  = serviceData["DestinationText"]["Text"]
         self.operatingDay = serviceData["OperatingDayRef"]
         self.operatingDay = triasApi.datetimeFromTriasDateStr(self.operatingDay)
+        self.stops        = []
         #process line name
         self.lineName = serviceData["ServiceSection"]["PublishedLineName"]["Text"]
-        if self.lineName.startswith("S"):
-            raise ValueError("Not an S-Bahn Line")
+        if not self.lineName.startswith("S"):
+            raise ValueError(f"Not an S-Bahn Line: {self.lineName}")
 
 
         #process incidentText
+        self.incidentText = None
         stopEventAttribs = serviceData.get("Attribute")
         if stopEventAttribs is not None:
             for att in stopEventAttribs:
@@ -96,13 +105,10 @@ class Journey:
         self.isUnplanned = (serviceData.get("Unplanned") == "true")
         self.isDeviated  = (serviceData.get("Deviation") == "true")
 
-
-
-
-@dataclasses.dataclass
+@dataclass
 class LiveJourney:
     journeyRef:   str
-    lineName:         str
+    lineName:     str
     origin:           str
     destination:      str
     delayMinutes:     int
@@ -114,67 +120,133 @@ class LiveJourney:
     nextStopRef:      str
     isCancelled:      bool
 
+    def _getExtrapolatedDelaysAtStop(self, stopsList: list[Stop], stopIdx: int):
+        delayBefore = None
+        for stopBeforeIdx in range(stopIdx-1, -1, -1):
+            stopBefore = stopsList[stopBeforeIdx]
+            departureES = stopBefore.departureEstimate
+            if departureES:
+                departureTT = stopBefore.departureTimetable
+                delayBefore = departureES - departureTT
+                break
+            arrivalES = stopBefore.arrivalEstimate
+            if arrivalES:
+                arrivalTT = stopBefore.arrivalTimetable
+                delayBefore = arrivalES - arrivalTT
+                break
+        delayAfter = None
+        for stopAfterIdx in range(stopIdx+1, len(stopsList)):
+            stopAfter = stopsList[stopAfterIdx]
+            arrivalES = stopAfter.arrivalEstimate
+            if arrivalES:
+                arrivalTT = stopAfter.arrivalTimetable
+                delayAfter = arrivalES - arrivalTT
+                break
+            departureES = stopAfter.departureEstimate
+            if departureES:
+                departureTT = stopAfter.departureTimetable
+                delayAfter = departureES - departureTT
+                break
+        return delayBefore, delayAfter
+
+    def _isIntermediateNotServicedStop(self, stopsList: list[Stop], stopIdx: int):
+        servicedStopBeforeExists = False
+        for stopBeforeIdx in range(stopIdx-1, -1, -1):
+            if not stopsList[stopBeforeIdx].isNotServiced:
+                servicedStopBeforeExists = True
+        servicedStopAfterExists = False
+        for stopAfterIdx in range(stopIdx+1, len(stopsList)):
+            if not stopsList[stopAfterIdx].isNotServiced:
+                servicedStopAfterExists = True
+        return (servicedStopBeforeExists and servicedStopAfterExists)
+
+
     def __init__(self, journey: Journey, evaluationTime: datetime.datetime):
-        #check for realtime data availability
-        for stop in jorney.stops:
-            if stop.departureEstimate or stop.arrivalEstimate:
-                break
-        else:
-            raise ValueError("Not a single station with realtime data found")
-
-        #extrapolate realtime data
-        for stopIdx, stop in enumerate(jorney.stops):
-            if stop.departureTimetable and not stop.departureEstimate:
-                #need to extrapolate, search forward
-                for range(stopIdx)
-            if stop.arrivalTimetable and not stop.arrivalEstimate:
-                #need to extrapolate
-                break
-
+        journey = deepcopy(journey)
 
         self.journeyRef = journey.journeyRef
         self.lineName = journey.lineName
         self.origin = journey.origin
         self.destination = journey.destination
         self.incidentText = journey.incidentText
+        self.progressNextStop = None
+        #extrapolate realtime data
+        for stopIdx, stop in enumerate(journey.stops):
+            if stop.departureTimetable and not stop.departureEstimate:
+                delayBefore, delayAfter = self._getExtrapolatedDelaysAtStop(journey.stops, stopIdx)
+                if stop.arrivalEstimate is not None:
+                    delayAtStop = stop.arrivalEstimate - stop.arrivalTimetable
+                    stop.departureEstimate = stop.departureTimetable + delayAtStop
+                elif delayBefore is not None:
+                    stop.departureEstimate = stop.departureTimetable + delayBefore
+                elif delayAfter is not None:
+                    stop.departureEstimate = stop.departureTimetable + delayAfter
+                else:
+                    ValueError("Insufficient realtime data")
+            if stop.arrivalTimetable and not stop.arrivalEstimate:
+                delayBefore, delayAfter = self._getExtrapolatedDelaysAtStop(journey.stops, stopIdx)
+                if delayBefore is not None:
+                    stop.arrivalEstimate = stop.arrivalTimetable + delayBefore
+                elif stop.departureEstimate is not None:
+                    delayAtStop = stop.departureEstimate - stop.departureTimetable
+                    stop.arrivalEstimate = stop.arrivalTimetable + delayAtStop
+                elif delayAfter is not None:
+                    stop.arrivalEstimate = stop.arrivalTimetable + delayAfter
+                else:
+                    ValueError("Insufficient realtime data")
+
+        for currentStopIdx in range(len(journey.stops)-1, -1, -1): #exclude first and last stop
+            currentStop = journey.stops[currentStopIdx]
+            if (currentStopIdx != len(journey.stops)-1) and currentStop.departureEstimate <= evaluationTime:
+                # train is just past this stop
+                self.currentStopName  = currentStop.stopPointName
+                self.currentStopRef   = currentStop.stopPointRef
+                self.delayMinutes     = currentStop.departureEstimate - currentStop.departureTimetable
+                break
+            elif (currentStopIdx != 0) and (currentStop.arrivalEstimate <= evaluationTime):
+                # train is waiting at this stop
+                self.progressNextStop = 0.0
+                self.currentStopName  = currentStop.stopPointName
+                self.currentStopRef   = currentStop.stopPointRef
+                self.delayMinutes     = currentStop.arrivalEstimate - currentStop.arrivalTimetable
+                break
+        else:
+            raise ValueError("Train has not yet started")
+        if currentStopIdx == len(journey.stops) - 1:
+            raise ValueError("Train has already ended")
+
+        self.delayMinutes = int(self.delayMinutes.total_seconds() / 60)
+        self.isCancelled = False
+        if currentStop.isNotServiced:
+            #skipped stops do not count as cancelation of the train
+            if not self._isIntermediateNotServicedStop(journey.stops, currentStopIdx):
+                self.isCancelled = True
+
+        #find next non skipped stop
+        for nextStopIdx in range(currentStopIdx + 1, len(journey.stops)):
+            nextStop = journey.stops[nextStopIdx]
+            if not nextStop.isNotServiced:
+                self.nextStopName = nextStop.stopPointName
+                self.nextStopRef  = nextStop.stopPointRef
+                break
+        else:
+            raise ValueError("Train has no remaining serviced stops")
 
 
-        self.currentStopName  =
-        self.currentStopRef   =
-        self.progressNextStop =
-        self.nextStopName     =
-        self.nextStopRef      =
-        self.isCancelled      =
-        self.delayMinutes     =
+        #calculate progress
+        if self.progressNextStop is None:
+            progressToNextStop = evaluationTime - journey.stops[currentStopIdx].departureEstimate
+            timeBetweenStops   = journey.stops[nextStopIdx].arrivalEstimate - journey.stops[currentStopIdx].departureEstimate
+            if timeBetweenStops != 0:
+                progressToNextStop /= timeBetweenStops
+            else:
+                raise ValueError("No travel time between stops")
+        print(self.as_dict())
 
-
-    def as_dict():
-        liveJourneyDict = dataclasses.asdict(self)
+    def as_dict(self):
+        liveJourneyDict = asdict(self)
         journeyRef = liveJourneyDict.pop("journeyRef")
         return {journeyRef: liveJourneyDict}
-
-
-            extrapolatedStops = crawl_helperFunc.extrapolateStopsWithClosestDelay(allStops)
-            if extrapolatedStops is None:
-                error += 1
-                continue
-
-            #check if the journey has already started
-            if currentTime < extrapolatedStops[0]["ttbDep"]:
-                toEarly += 1
-                continue
-
-            #check if the journey has already ended
-            if extrapolatedStops[-1]["estArr"] < currentTime:
-                toLate += 1
-                continue
-
-            getLiveJourney(serviceData, allStops, extrapolatedStops, currentTime, liveJourneysDict)
-            good += 1
-        except Exception as e:
-            error += 1
-            logging.error(traceback.format_exc())
-
 
 base_dir = Path(__file__).parent
 triasApi.requestorKey = open(base_dir/"requestor.key").read()
@@ -183,99 +255,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(message)s'
 )
-
-def getLiveJourney(serviceData, allStops, extrapolatedStops, currentTime, outputDict):
-    for currentStopIdx in range(len(extrapolatedStops)-2, 0, -1): #exclude first and last stop
-        processedStop = extrapolatedStops[currentStopIdx]
-        if processedStop["estDep"] < currentTime:
-            #train left this station and is on the way to the next
-            progressToNextStop = None #still needs to be calculated
-            delay = processedStop["estDep"] - processedStop["ttbDep"]
-            break
-            #find next station
-
-        elif processedStop["estArr"] < currentTime:
-            #train is at this station
-            progressToNextStop = 0.0
-            delay = processedStop["estArr"] - processedStop["ttbArr"]
-            break
-    else:
-        if processedStop["estDep"] < currentTime:
-            #train left first station and is on the way to the next
-            progressToNextStop = None #still needs to be calculated
-        else:
-            progressToNextStop = 0.0
-        delay = processedStop["estDep"] - processedStop["ttbDep"]
-    delay = delay.total_seconds()
-    cancelled = False
-    if extrapolatedStops[currentStopIdx]["notServiced"]:
-        if not extrapolatedStops[currentStopIdx]["intermediateNotServiced"]:
-            cancelled = True
-    #find next valid stop
-    for nextStopIdx in range(currentStopIdx+1, len(extrapolatedStops)):
-        if extrapolatedStops[nextStopIdx]["notServiced"]:
-            if not extrapolatedStops[nextStopIdx]["intermediateNotServiced"]:
-                cancelled = True
-            else:
-                continue
-        break
-    if progressToNextStop is None:
-        progressToNextStop = currentTime - extrapolatedStops[currentStopIdx]["estDep"]
-        timeBetweenStops   = extrapolatedStops[nextStopIdx]["estArr"] - extrapolatedStops[currentStopIdx]["estDep"]
-        if timeBetweenStops == 0:
-            logging.warning("zero travel time between stops")
-            progressToNextStop = 0.0
-        else:
-            progressToNextStop /= timeBetweenStops
-
-    liveJourney = {
-        "delay":            delay / 60,
-        "lineName":         serviceData["ServiceSection"]["PublishedLineName"]["Text"],
-        "incidentText":     crawl_helperFunc.getIncidentText(serviceData),
-        "currentStopName":  currentStopName,
-        "currentStopRef":   currentStopRef,
-        "nextStopName":     nextStopName,
-        "nextStopRef":      nextStopRef,
-        "destination":      serviceData["DestinationText"]["Text"],
-        "origin":           serviceData["OriginText"]["Text"],
-        "progressNextStop": progressToNextStop,
-        "cancelled":        cancelled
-    }
-
-    trainJourneyRef  = serviceData["JourneyRef"]
-    outputDict["journeys"][trainJourneyRef] = liveJourney
-
-
-def getAllDelaysThroughStation(stationName, stationRef, liveJourneysDict):
-
-
-
-            if not crawl_helperFunc.hasAnyRealtimeData(allStops):
-                noData += 1
-                continue
-
-            extrapolatedStops = crawl_helperFunc.extrapolateStopsWithClosestDelay(allStops)
-            if extrapolatedStops is None:
-                error += 1
-                continue
-
-            #check if the journey has already started
-            if currentTime < extrapolatedStops[0]["ttbDep"]:
-                toEarly += 1
-                continue
-
-            #check if the journey has already ended
-            if extrapolatedStops[-1]["estArr"] < currentTime:
-                toLate += 1
-                continue
-
-            getLiveJourney(serviceData, allStops, extrapolatedStops, currentTime, liveJourneysDict)
-            good += 1
-        except Exception as e:
-            error += 1
-            logging.error(traceback.format_exc())
-    logging.info(f"statistic for {stationName}: good: {good}, early: {toEarly}, late: {toLate}, no data: {noData}, error: {error}")
-
 
 def main():
     #get trias data
@@ -302,20 +281,22 @@ def main():
         "journeys": dict(),
     }
     for stationTuple in queryStationList:
-        stopEventResponse        = triasApi.getStopEvents(stationName, stationRef, numResults=100)
+        stopEventResponse        = triasApi.getStopEvents(*stationTuple, numResults=100)
         timestampStr, calcTimeMs = triasApi.getResponseStatistics(stopEventResponse)
-        currentTime              = datetime.now().astimezone()
+        currentTime              = datetime.datetime.now().astimezone()
         allLiveJourneysDict["info"]["responseTimestamp"] = timestampStr
         allLiveJourneysDict["info"]["calculationTimeMs"] += calcTimeMs
         serviceDelivery = stopEventResponse["Trias"]["ServiceDelivery"]
-
-        for stopEvent in serviceDelivery["DeliveryPayload"]["StopEventResponse"]
+        for stopEvent in serviceDelivery["DeliveryPayload"]["StopEventResponse"]["StopEventResult"]:
+            #print(serviceDelivery)
             try:
                 journey     = Journey(stopEvent)
-                liveJourney = LiveJourney(journey, evaluationTime)
+                liveJourney = LiveJourney(journey, evaluationTime=currentTime)
+                print(liveJourney.as_dict())
                 allLiveJourneysDict["journeys"] |= liveJourney.as_dict()
             except Exception as e:
-                logging.warning("no or invalid live data")
+                traceback.print_exc()
+                #logging.warning(f"no or invalid live data {e}")
 
     #write live data into json
     with open(base_dir/"www/currentRunningTrains.json", "w") as outputfile:
