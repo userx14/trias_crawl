@@ -1828,16 +1828,13 @@
        id="path69" />
   </g>
   <text
-     xml:space="preserve"
-     style="font-stretch:condensed;font-size:74.6667px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Condensed';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#ffffff;stroke-width:3.8;stroke-linecap:round;stroke-linejoin:round"
-     x="1136.1797"
-     y="129.35378"
-     id="title"><tspan
-       sodipodi:role="line"
-       id="tspan1"
-       x="1136.1797"
-       y="129.35378"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:74.6667px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';fill:#000000;fill-opacity:1">&lt;replaced&gt;</tspan></text>
+     x="1013.7375"
+     y="139.27184"
+     font-family="sans-serif"
+     font-size="74.6667"
+     fill="#ffffff"
+     id="title"
+     style="fill:#000000">&lt;replaced&gt;</text>
   <path
      style="fill:#000000;fill-opacity:1;stroke:url(#linearGradient2);stroke-width:33.8103;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
      d="M 138.1736,462.33524 H 432.42932"

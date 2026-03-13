@@ -23,7 +23,6 @@ def changeMapTitle(svgDict, newTitle):
         for textElement in svgDict["svg"]["text"]:
             if textElement["@id"] == "title":
                 textElement["#text"] = newTitle
-                print("write new title")
                 break
         else:
             logging.error("could not locate map title")
@@ -187,7 +186,7 @@ def makeColormap(stops, colors):
         return "#{:02x}{:02x}{:02x}".format(*rgb)
     return cmap
 
-def analyze_data(callbackAnalysis, analysisDayStart, analysisDayEnd):
+def analyze_data(callbackAnalysis, analysisDayStart, analysisDayEnd, perJourneyCallback = False):
     analysisDayStart = analysisDayStart.astimezone(timezone.utc)
     analysisDayEnd   = analysisDayEnd.astimezone(timezone.utc)
     analysisDayStart = analysisDayStart.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -214,11 +213,20 @@ def analyze_data(callbackAnalysis, analysisDayStart, analysisDayEnd):
         cursor.execute(f"SELECT * FROM stops WHERE operatingDay=? AND journeyRef=? ORDER BY stopIndex ASC;", (operatingDay,journeyRef,))
         stops = cursor.fetchall()
         keysStop = list(map(lambda x: x[0], cursor.description))
-        for stopData in stops:
-            stopDict = dict()
-            for keyIdx, key in enumerate(keysStop):
-                stopDict[key] = stopData[keyIdx]
-            callbackAnalysis(journeyDict, stopDict)
+        if perJourneyCallback:
+            stopDictList = []
+            for stopData in stops:
+                stopDict = dict()
+                for keyIdx, key in enumerate(keysStop):
+                    stopDict[key] = stopData[keyIdx]
+                stopDictList.append(stopDict)
+            callbackAnalysis(journeyDict, stopDictList)
+        else:
+            for stopData in stops:
+                stopDict = dict()
+                for keyIdx, key in enumerate(keysStop):
+                    stopDict[key] = stopData[keyIdx]
+                callbackAnalysis(journeyDict, stopDict)
     connection.close()
 
 
@@ -234,11 +242,25 @@ def placeStationInfo(svgDict, linesPathDict, lineName, stationIdx, colormap, val
         "title": hoverText
     }
     svgDict["svg"]["circle"].append(circle)
+
+def placeSectionInfo(svgDict, linesPathDict, lineName, stationIdx, colormap, value, hoverText):
+    if "path" not in svgDict["svg"].keys():
+        svgDict["svg"]["path"] = []
+    linePath = linesPathDict[lineName]
+    currentLineStations = linesStations[lineName]
+    parsedPath = parse_path(linePath["@d"])
+    startSegmentIdx = segmBetweenStops*stationIdx
+    endSegmentIdx = startSegmentIdx+2
+    for segmentIdx in range(startSegmentIdx, endSegmentIdx):
+        activeSegment = parsedPath[startSegmentIdx]
+        print(help(activeSegment))
+    #svgDict["svg"]["path"].append()
+
 def render_nonServStatMap(startDay, endDay, inputSvgPath, outputSvgPath):
 
     svgDict, linesPathDict, _, cmap = parseSvg(inputSvgPath)
-    title = "Durchschnittliche Verspätung am Halt, "
-    if startDay == endDay:
+    title = "Ungeplant ausgefallene Halte, "
+    if startDay.date() == endDay.date():
         title += f"am {startDay.strftime('%d.%m.%Y')}"
     else:
         title += f"vom {startDay.strftime('%d.%m.%Y')} "
@@ -272,12 +294,58 @@ def render_nonServStatMap(startDay, endDay, inputSvgPath, outputSvgPath):
     with open(outputSvgPath, "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict, pretty=True))
 
+def render_delaySectionMap(startDay, endDay, inputSvgPath, outputSvgPath):
+
+    svgDict, linesPathDict, _, cmap = parseSvg(inputSvgPath)
+    title = "Durchschnittliche Verspätungsänderung auf Streckenabschnitt, "
+    if startDay.date() == endDay.date():
+        title += f"am {startDay.strftime('%d.%m.%Y')}"
+    else:
+        title += f"vom {startDay.strftime('%d.%m.%Y')} "
+        title += f"bis {endDay.strftime('%d.%m.%Y')}"
+    changeMapTitle(svgDict, title)
+
+    #to store delay data
+    delaySectionDict = copy.deepcopy(linesStations)
+    for lineStations in delaySectionDict.values():
+        for station in lineStations:
+            station.append([])
+
+    def delayAnalysisCallback(journeyDict, stopDictList):
+        for currentStopIdx in range(len(stopDictList) - 1):
+            nextStopIdx = currentStopIdx + 1
+            currentStopDict = stopDictList[currentStopIdx]
+            nextStopDict = stopDictList[nextStopIdx]
+            startDelay = currentStopDict["departureEstimate"]
+            endDelay   = nextStopDict["arrivalEstimate"]
+            if (startDelay is None) or (endDelay is None):
+                return
+            delayChange = endDelay - startDelay
+            rawLineName             = journeyDict["lineName"]
+            lineName, currentStationIdx, _ = getStopIndices(rawLineName, linesPathDict, currentStopDict["stopPointRef"], currentStopDict["stopPointRef"])
+            _ , nextStationIdx, _ = getStopIndices(rawLineName, linesPathDict, nextStopDict["stopPointRef"], nextStopDict["stopPointRef"])
+
+            if (currentStationIdx is None) or (nextStationIdx is None):
+                return
+            delaySectionDict[lineName][min(currentStationIdx, nextStationIdx)][2].append(delayChange)
+
+    analyze_data(delayAnalysisCallback, startDay, endDay, perJourneyCallback = True)
+    for lineName, lineStations in delaySectionDict.items():
+        for stationIdx, station in enumerate(lineStations):
+            if len(station[2]) != 0:
+                combinedDelayChange = sum(station[2])
+                numberOfStops = len(station[2])
+                averageDelayChange  = combinedDelayChange/numberOfStops
+                #placeStationInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, averageDelay, f"Durchschnittsverspätung: {round(averageDelay,2)} min")
+                placeSectionInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, averageDelayChange, None)
+    with open(outputSvgPath, "w") as outputSvg:
+        outputSvg.write(xmltodict.unparse(svgDict, pretty=True))
 
 def render_delayStatMap(startDay, endDay, inputSvgPath, outputSvgPath):
 
     svgDict, linesPathDict, _, cmap = parseSvg(inputSvgPath)
-    title = "Durchschnittliche Verspätung am Halt, "
-    if startDay == endDay:
+    title = "Durchschnittliche Verspätung an Haltestelle, "
+    if startDay.date() == endDay.date():
         title += f"am {startDay.strftime('%d.%m.%Y')}"
     else:
         title += f"vom {startDay.strftime('%d.%m.%Y')} "
@@ -405,12 +473,16 @@ def render_liveMap(inputDataJsonPath, inputSvgPath, outputSvgPath):
         outputSvg.write(xmltodict.unparse(svgDict, pretty=True))
 
 if __name__ == "__main__":
-    render_delayStatMap(datetime.now(),                    datetime.now(),                    "./svg_source/stat_map_delay_source.svg", "./stat_map_delay_today.svg")
-    render_delayStatMap(datetime.now()+timedelta(days=-1), datetime.now()+timedelta(days=-1), "./svg_source/stat_map_delay_source.svg", "./stat_map_delay_yesterday.svg")
-    render_delayStatMap(datetime.now()+timedelta(days=-7), datetime.now(),                    "./svg_source/stat_map_delay_source.svg", "./stat_map_delay_lastWeek.svg")
-
-    render_nonServStatMap(datetime.now(),                    datetime.now(),                    "./svg_source/stat_map_delay_source.svg", "./stat_map_nonServ_today.svg")
-    render_nonServStatMap(datetime.now()+timedelta(days=-1), datetime.now()+timedelta(days=-1), "./svg_source/stat_map_delay_source.svg", "./stat_map_nonServ_yesterday.svg")
-    render_nonServStatMap(datetime.now()+timedelta(days=-7), datetime.now(),                    "./svg_source/stat_map_delay_source.svg", "./stat_map_nonServ_lastWeek.svg")
-
     render_liveMap("./currentRunningTrains.json", "./svg_source/live_map_source_light.svg", "live_map.svg")
+
+    now = datetime.now()
+
+    render_delayStatMap(now ,                   now,                    "./svg_source/stat_map_delay_source.svg", "./stat_map_delay_today.svg")
+    render_delayStatMap(now+timedelta(days=-1), now+timedelta(days=-1), "./svg_source/stat_map_delay_source.svg", "./stat_map_delay_yesterday.svg")
+    render_delayStatMap(now+timedelta(days=-7), now,                    "./svg_source/stat_map_delay_source.svg", "./stat_map_delay_lastWeek.svg")
+
+    render_nonServStatMap(now,                    now,                    "./svg_source/stat_map_delay_source.svg", "./stat_map_nonServ_today.svg")
+    render_nonServStatMap(now+timedelta(days=-1), now+timedelta(days=-1), "./svg_source/stat_map_delay_source.svg", "./stat_map_nonServ_yesterday.svg")
+    render_nonServStatMap(now+timedelta(days=-7), now,                    "./svg_source/stat_map_delay_source.svg", "./stat_map_nonServ_lastWeek.svg")
+
+    render_delaySectionMap(now, now, "./svg_source/stat_map_delay_source.svg", "./stat_map_delay_section_today.svg")
