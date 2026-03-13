@@ -7,25 +7,24 @@ import json
 import subprocess
 import traceback
 import xmltodict
-import datetime
 import triasApi
-import crawl_helperFunc
+import sqlite3
 
 @dataclass
 class Stop:
-    stopPointName: str
-    stopPointRef: str
-    stopIndex: int
-    departureTimetable: datetime.datetime
-    departureEstimate: datetime.datetime
-    arrivalTimetable: datetime.datetime
-    arrivalEstimate: datetime.datetime
-    isNotServiced: bool
+    stopPointName:      str
+    stopPointRef:       str
+    stopIndex:          int
+    departureTimetable: datetime
+    departureEstimate:  datetime
+    arrivalTimetable:   datetime
+    arrivalEstimate:    datetime
+    isNotServiced:      bool
 
     def __init__(self, stopCall, stopIndexOffset = 0):
         self.stopPointName = stopCall["StopPointName"]["Text"]
-        self.stopPointRef = stopCall["StopPointRef"]
-        self.stopIndex = int(stopCall["StopSeqNumber"]) + stopIndexOffset
+        self.stopPointRef  = stopCall["StopPointRef"]
+        self.stopIndex     = int(stopCall["StopSeqNumber"]) + stopIndexOffset
 
         arrival = stopCall.get("ServiceArrival")
         if arrival is not None:
@@ -47,11 +46,13 @@ class Stop:
 
         self.isNotServiced = (stopCall.get("NotServicedStop") == "true")
 
+class JourneyProcessError(Exception):
+    pass
 
 @dataclass
 class Journey:
     journeyRef:   str
-    operatingDay: datetime.datetime
+    operatingDay: datetime
     lineName:     str
     origin:       str
     destination:  str
@@ -73,7 +74,7 @@ class Journey:
         #process line name
         self.lineName = serviceData["ServiceSection"]["PublishedLineName"]["Text"]
         if not self.lineName.startswith("S"):
-            raise ValueError(f"Not an S-Bahn Line: {self.lineName}")
+            raise JourneyProcessError(f"Not an S-Bahn Line: {self.lineName}")
 
 
         #process incidentText
@@ -105,13 +106,46 @@ class Journey:
         self.isUnplanned = (serviceData.get("Unplanned") == "true")
         self.isDeviated  = (serviceData.get("Deviation") == "true")
 
+    def storeInSqlDb(self, sqlConnection):
+        sqlCursor = sqlConnection.cursor()
+
+        #store journey
+        journeyDict = asdict(self)
+        journeyDict.pop("stops")
+        for journeyKey, journeyValue in journeyDict.items():
+            if isinstance(journeyValue, datetime):
+                journeyDict[journeyKey] = journeyValue.timestamp()
+        sqlJourneyData     = tuple(journeyDict.values())
+        sqlJourneyCommand  = f'''
+            INSERT OR REPLACE INTO journeys ({', '.join(journeyDict.keys())})
+            VALUES ({', '.join(['?'] * len(journeyDict))});
+        '''
+        sqlCursor.execute(sqlJourneyCommand, sqlJourneyData)
+
+        #store stops
+        for stop in self.stops:
+            stopDict = asdict(stop)
+            stopDict["operatingDay"] = self.operatingDay
+            stopDict["journeyRef"]   = self.journeyRef
+            for stopKey, stopValue in stopDict.items():
+                if isinstance(stopValue, datetime):
+                    stopDict[stopKey] = stopValue.timestamp()
+            sqlStopData    = tuple(stopDict.values())
+            sqlStopCommand = f'''
+                INSERT OR REPLACE INTO stops ({', '.join(stopDict.keys())})
+                VALUES ({', '.join(['?'] * len(stopDict))});
+            '''
+            sqlCursor.execute(sqlStopCommand, sqlStopData)
+
+        sqlConnection.commit()
+
 @dataclass
 class LiveJourney:
-    journeyRef:   str
-    lineName:     str
+    journeyRef:       str
+    lineName:         str
     origin:           str
     destination:      str
-    delayMinutes:     int
+    delayMinutes:     float
     incidentText:     str
     currentStopName:  str
     currentStopRef:   str
@@ -131,7 +165,7 @@ class LiveJourney:
                 break
             arrivalES = stopBefore.arrivalEstimate
             if arrivalES:
-                arrivalTT = stopBefore.arrivalTimetable
+                arrivalTT   = stopBefore.arrivalTimetable
                 delayBefore = arrivalES - arrivalTT
                 break
         delayAfter = None
@@ -139,13 +173,13 @@ class LiveJourney:
             stopAfter = stopsList[stopAfterIdx]
             arrivalES = stopAfter.arrivalEstimate
             if arrivalES:
-                arrivalTT = stopAfter.arrivalTimetable
+                arrivalTT  = stopAfter.arrivalTimetable
                 delayAfter = arrivalES - arrivalTT
                 break
             departureES = stopAfter.departureEstimate
             if departureES:
                 departureTT = stopAfter.departureTimetable
-                delayAfter = departureES - departureTT
+                delayAfter  = departureES - departureTT
                 break
         return delayBefore, delayAfter
 
@@ -161,9 +195,8 @@ class LiveJourney:
         return (servicedStopBeforeExists and servicedStopAfterExists)
 
 
-    def __init__(self, journey: Journey, evaluationTime: datetime.datetime):
+    def __init__(self, journey: Journey, evaluationTime: datetime):
         journey = deepcopy(journey)
-
         self.journeyRef = journey.journeyRef
         self.lineName = journey.lineName
         self.origin = journey.origin
@@ -182,7 +215,7 @@ class LiveJourney:
                 elif delayAfter is not None:
                     stop.departureEstimate = stop.departureTimetable + delayAfter
                 else:
-                    ValueError("Insufficient realtime data")
+                    raise JourneyProcessError("Insufficient realtime data")
             if stop.arrivalTimetable and not stop.arrivalEstimate:
                 delayBefore, delayAfter = self._getExtrapolatedDelaysAtStop(journey.stops, stopIdx)
                 if delayBefore is not None:
@@ -193,7 +226,7 @@ class LiveJourney:
                 elif delayAfter is not None:
                     stop.arrivalEstimate = stop.arrivalTimetable + delayAfter
                 else:
-                    ValueError("Insufficient realtime data")
+                    raise JourneyProcessError("Insufficient realtime data")
 
         for currentStopIdx in range(len(journey.stops)-1, -1, -1): #exclude first and last stop
             currentStop = journey.stops[currentStopIdx]
@@ -211,11 +244,11 @@ class LiveJourney:
                 self.delayMinutes     = currentStop.arrivalEstimate - currentStop.arrivalTimetable
                 break
         else:
-            raise ValueError("Train has not yet started")
+            raise JourneyProcessError("Train has not yet started")
         if currentStopIdx == len(journey.stops) - 1:
-            raise ValueError("Train has already ended")
+            raise JourneyProcessError("Train has already ended")
 
-        self.delayMinutes = int(self.delayMinutes.total_seconds() / 60)
+        self.delayMinutes = round(self.delayMinutes.total_seconds() / 60, 1)
         self.isCancelled = False
         if currentStop.isNotServiced:
             #skipped stops do not count as cancelation of the train
@@ -230,18 +263,13 @@ class LiveJourney:
                 self.nextStopRef  = nextStop.stopPointRef
                 break
         else:
-            raise ValueError("Train has no remaining serviced stops")
-
+            raise JourneyProcessError("Train has no remaining serviced stops")
 
         #calculate progress
         if self.progressNextStop is None:
-            progressToNextStop = evaluationTime - journey.stops[currentStopIdx].departureEstimate
+            self.progressNextStop = evaluationTime - journey.stops[currentStopIdx].departureEstimate
             timeBetweenStops   = journey.stops[nextStopIdx].arrivalEstimate - journey.stops[currentStopIdx].departureEstimate
-            if timeBetweenStops != 0:
-                progressToNextStop /= timeBetweenStops
-            else:
-                raise ValueError("No travel time between stops")
-        print(self.as_dict())
+            self.progressNextStop /= timeBetweenStops
 
     def as_dict(self):
         liveJourneyDict = asdict(self)
@@ -255,6 +283,44 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(message)s'
 )
+
+def sqlInitConnection():
+    sqlJourneyTableInit = """CREATE TABLE IF NOT EXISTS journeys (
+        operatingDay INTEGER NOT NULL,      /*unix time utc*/
+        journeyRef   TEXT,
+        lineName     TEXT,
+        origin       TEXT,
+        destination  TEXT,
+        incidentText TEXT,
+        isCancelled  INTEGER,               /*boolean*/
+        isUnplanned  INTEGER,               /*boolean*/
+        isDeviated   INTEGER,               /*boolean*/
+        PRIMARY KEY (operatingDay, journeyRef)
+    );"""
+
+    sqlStopTableInit = """CREATE TABLE IF NOT EXISTS stops (
+        operatingDay        INTEGER NOT NULL,       /*unix time utc*/
+        journeyRef          TEXT NOT NULL,
+        stopIndex           INTEGER NOT NULL,
+        stopPointName       TEXT,
+        stopPointRef        TEXT,
+        isNotServiced       INTEGER,                /*boolean*/
+        departureTimetable  INTEGER,                /*unix time utc*/
+        departureEstimate   INTEGER,                /*unix time utc*/
+        arrivalTimetable    INTEGER,                /*unix time utc*/
+        arrivalEstimate     INTEGER,                /*unix time utc*/
+        PRIMARY KEY (operatingDay, journeyRef, stopIndex),
+        FOREIGN KEY (operatingDay, journeyRef) REFERENCES journeys(operatingDay, journeyRef)
+    );
+    """
+    yearInt = datetime.now().year
+    connection = sqlite3.connect(base_dir/f'loggedJourney_{yearInt}.db')
+    cursor = connection.cursor()
+    cursor.execute(sqlJourneyTableInit)
+    cursor.execute(sqlStopTableInit)
+    connection.commit()
+    cursor.close()
+    return connection
 
 def main():
     #get trias data
@@ -274,33 +340,46 @@ def main():
         "info": {
             "calculationTimeMs":          0,
             "responseTimestamp":          None,
-            "attachedDataFormatRevision": "2026.02.26",
+            "attachedDataFormatRevision": "2026.03.11",
             "license":                    "DL-DE/BY-2-0",
             "rawDataSourceUrl":           "https://mobidata-bw.de/dataset/trias",
         },
         "journeys": dict(),
     }
+    sqlConnection = sqlInitConnection()
     for stationTuple in queryStationList:
         stopEventResponse        = triasApi.getStopEvents(*stationTuple, numResults=100)
         timestampStr, calcTimeMs = triasApi.getResponseStatistics(stopEventResponse)
-        currentTime              = datetime.datetime.now().astimezone()
+        currentTime              = datetime.now().astimezone()
         allLiveJourneysDict["info"]["responseTimestamp"] = timestampStr
         allLiveJourneysDict["info"]["calculationTimeMs"] += calcTimeMs
         serviceDelivery = stopEventResponse["Trias"]["ServiceDelivery"]
-        for stopEvent in serviceDelivery["DeliveryPayload"]["StopEventResponse"]["StopEventResult"]:
+        ignoredStopEventCounter = 0
+        allStopEventList = serviceDelivery["DeliveryPayload"]["StopEventResponse"]["StopEventResult"]
+        for stopEvent in allStopEventList:
             #print(serviceDelivery)
             try:
                 journey     = Journey(stopEvent)
                 liveJourney = LiveJourney(journey, evaluationTime=currentTime)
-                print(liveJourney.as_dict())
-                allLiveJourneysDict["journeys"] |= liveJourney.as_dict()
-            except Exception as e:
-                traceback.print_exc()
-                #logging.warning(f"no or invalid live data {e}")
+                liveJourney = asdict(liveJourney)
+                journeyRef  = liveJourney.pop("journeyRef")
+                allLiveJourneysDict["journeys"] |= {journeyRef: liveJourney}
+                journey.storeInSqlDb(sqlConnection)
+            except JourneyProcessError as e:
+                ignoredStopEventCounter += 1
+            except Exception:
+                logging.exception(f"Error while processing stopEvent: {stopEvent}")
+        print(f"using {len(allStopEventList)-ignoredStopEventCounter} / {len(allStopEventList)} journeys")
+    sqlConnection.close()
 
     #write live data into json
     with open(base_dir/"www/currentRunningTrains.json", "w") as outputfile:
         outputfile.write(json.dumps(allLiveJourneysDict, indent=4))
+
+
+    from visualize_statMap import update_stat_delay_map, update_stat_notServiced_map
+    update_stat_delay_map(analysisStartDay, analysisEndDay, www_dir/"stat_map_delay_today.svg")
+    update_stat_notServiced_map(analysisStartDay, analysisEndDay, www_dir/"stat_map_notServiced_today.svg")
 
     #render livemap
     www_dir = base_dir/'www'
@@ -308,7 +387,8 @@ def main():
         from visualize_liveMap import render_liveMap
         render_liveMap(www_dir/"currentRunningTrains.json", base_dir/"svg_source"/"live_map_source_light.svg", www_dir/"live_map.svg")
     except Exception as e:
-        logging.exception("Failed to update live map")
+        logging.error("during livemap render:\n%s", traceback.format_exc())
+
 
     #upload
     crawl_helperFunc.copy_www_to_webhost(www_dir)

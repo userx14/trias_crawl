@@ -6,7 +6,7 @@
    fill="none"
    version="1.1"
    id="svg201"
-   sodipodi:docname="stat_map_notServiced_source.svg"
+   sodipodi:docname="stat_map_notServ_source.svg"
    inkscape:version="1.4.2 (ebf0e940d0, 2025-05-08)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -22,9 +22,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="0.63393032"
-     inkscape:cx="1704.446"
-     inkscape:cy="406.19606"
+     inkscape:zoom="0.51401048"
+     inkscape:cx="290.8501"
+     inkscape:cy="841.42254"
      inkscape:window-width="1920"
      inkscape:window-height="1008"
      inkscape:window-x="0"
@@ -1841,7 +1841,7 @@
   <path
      style="fill:#000000;fill-opacity:1;stroke:url(#linearGradient2);stroke-width:33.8103;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
      d="M 138.1736,462.33524 H 432.42932"
-     id="colormap"
+     id="colormap_gradient"
      sodipodi:nodetypes="cc" />
   <path
      style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
@@ -1854,34 +1854,34 @@
   <text
      xml:space="preserve"
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:37.3333px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-     x="99.435165"
+     x="97.881218"
      y="396.41534"
-     id="text3"><tspan
+     id="colormap_minText"><tspan
        sodipodi:role="line"
        id="tspan3"
-       x="99.435165"
+       x="97.881218"
        y="396.41534"
-       style="font-size:37.3333px;stroke:none">0%</tspan></text>
+       style="font-size:37.3333px;stroke:none">0 %</tspan></text>
   <text
      xml:space="preserve"
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:37.3333px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-     x="184.57909"
-     y="426.64246"
+     x="195.02922"
+     y="353.80667"
      id="text3-3"><tspan
        sodipodi:role="line"
        id="tspan3-7"
-       x="184.57909"
-       y="426.64246"
+       x="195.02922"
+       y="353.80667"
        style="font-size:37.3333px;stroke:none">Ausfallquote</tspan></text>
   <text
      xml:space="preserve"
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:37.3333px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-     x="415.37506"
+     x="407.85471"
      y="396.78296"
-     id="text3-9"><tspan
+     id="colormap_maxText"><tspan
        sodipodi:role="line"
        id="tspan3-2"
-       x="415.37506"
+       x="407.85471"
        y="396.78296"
-       style="font-size:37.3333px;stroke:none">20%</tspan></text>
+       style="font-size:37.3333px;stroke:none">10 %</tspan></text>
 </svg>

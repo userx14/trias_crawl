@@ -22,9 +22,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="0.36363832"
-     inkscape:cx="1632.1162"
-     inkscape:cy="578.87189"
+     inkscape:zoom="1.2984887"
+     inkscape:cx="386.21822"
+     inkscape:cy="512.51889"
      inkscape:window-width="1920"
      inkscape:window-height="1008"
      inkscape:window-x="0"
@@ -1841,7 +1841,7 @@
   <path
      style="fill:#000000;fill-opacity:1;stroke:url(#linearGradient2);stroke-width:33.8103;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
      d="M 138.1736,462.33524 H 432.42932"
-     id="colormap"
+     id="colormap_gradient"
      sodipodi:nodetypes="cc" />
   <path
      style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
@@ -1856,7 +1856,7 @@
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:37.3333px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
      x="77.087814"
      y="396.41534"
-     id="text3"><tspan
+     id="colormap_minText"><tspan
        sodipodi:role="line"
        id="tspan3"
        x="77.087814"
@@ -1878,7 +1878,7 @@
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:37.3333px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
      x="384.75092"
      y="396.78296"
-     id="text3-9"><tspan
+     id="colormap_maxText"><tspan
        sodipodi:role="line"
        id="tspan3-2"
        x="384.75092"
