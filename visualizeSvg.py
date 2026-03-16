@@ -1,4 +1,5 @@
 from svgpathtools        import parse_path
+from svgpathtools        import Path as SvgPath
 from svgpathtools.parser import parse_transform
 from svgpathtools.path   import translate, rotate, scale
 from datetime            import datetime, timezone, timedelta
@@ -244,17 +245,25 @@ def placeStationInfo(svgDict, linesPathDict, lineName, stationIdx, colormap, val
     svgDict["svg"]["circle"].append(circle)
 
 def placeSectionInfo(svgDict, linesPathDict, lineName, stationIdx, colormap, value, hoverText):
-    if "path" not in svgDict["svg"].keys():
-        svgDict["svg"]["path"] = []
+    #find group that contains S-Bahn paths
+    for group in svgDict["svg"]["g"]:
+        if group["@id"] == "g2":
+            break
     linePath = linesPathDict[lineName]
     currentLineStations = linesStations[lineName]
     parsedPath = parse_path(linePath["@d"])
     startSegmentIdx = segmBetweenStops*stationIdx
-    endSegmentIdx = startSegmentIdx+2
-    for segmentIdx in range(startSegmentIdx, endSegmentIdx):
-        activeSegment = parsedPath[startSegmentIdx]
-        print(help(activeSegment))
-    #svgDict["svg"]["path"].append()
+    endSegmentIdx = startSegmentIdx+3
+    dString = SvgPath(*parsedPath[startSegmentIdx: endSegmentIdx]).d()
+    style = re.sub(r"stroke:[^;]+", f"stroke:{colormap(value)}", linePath["@style"])
+
+    group["path"].append({
+        "@d":            dString,
+        "@stroke":       linePath["@stroke"],
+        "@style":        style,
+        "@stroke-width": linePath["@stroke-width"],
+        "title":         hoverText,
+    })
 
 def render_nonServStatMap(startDay, endDay, inputSvgPath, outputSvgPath):
 
@@ -316,11 +325,13 @@ def render_delaySectionMap(startDay, endDay, inputSvgPath, outputSvgPath):
             nextStopIdx = currentStopIdx + 1
             currentStopDict = stopDictList[currentStopIdx]
             nextStopDict = stopDictList[nextStopIdx]
-            startDelay = currentStopDict["departureEstimate"]
-            endDelay   = nextStopDict["arrivalEstimate"]
-            if (startDelay is None) or (endDelay is None):
+            startES = currentStopDict["departureEstimate"]
+            startTT = currentStopDict["departureTimetable"]
+            endES   = nextStopDict["arrivalEstimate"]
+            endTT   = nextStopDict["arrivalTimetable"]
+            if (startES is None) or (startTT is None) or (endES is None) or (endTT is None):
                 return
-            delayChange = endDelay - startDelay
+            delayChange = ((endES-endTT) - (startES-startTT))/60
             rawLineName             = journeyDict["lineName"]
             lineName, currentStationIdx, _ = getStopIndices(rawLineName, linesPathDict, currentStopDict["stopPointRef"], currentStopDict["stopPointRef"])
             _ , nextStationIdx, _ = getStopIndices(rawLineName, linesPathDict, nextStopDict["stopPointRef"], nextStopDict["stopPointRef"])
@@ -485,4 +496,4 @@ if __name__ == "__main__":
     render_nonServStatMap(now+timedelta(days=-1), now+timedelta(days=-1), "./svg_source/stat_map_delay_source.svg", "./stat_map_nonServ_yesterday.svg")
     render_nonServStatMap(now+timedelta(days=-7), now,                    "./svg_source/stat_map_delay_source.svg", "./stat_map_nonServ_lastWeek.svg")
 
-    render_delaySectionMap(now, now, "./svg_source/stat_map_delay_source.svg", "./stat_map_delay_section_today.svg")
+    render_delaySectionMap(now, now, "./svg_source/stat_map_delayChange_source.svg", "./stat_map_delay_section_today.svg")
