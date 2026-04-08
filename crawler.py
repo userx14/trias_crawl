@@ -322,7 +322,7 @@ def sqlInitConnection():
     cursor.close()
     return connection
 
-def main():
+def getDelayData():
     #get trias data
     queryStationList = [
         ('Zuffenhausen',       'de:08111:6465'),
@@ -357,7 +357,6 @@ def main():
         ignoredStopEventCounter = 0
         allStopEventList = serviceDelivery["DeliveryPayload"]["StopEventResponse"]["StopEventResult"]
         for stopEvent in allStopEventList:
-            #print(serviceDelivery)
             try:
                 journey     = Journey(stopEvent)
                 liveJourney = LiveJourney(journey, evaluationTime=currentTime)
@@ -375,27 +374,3 @@ def main():
     #write live data into json
     with open(base_dir/"www/currentRunningTrains.json", "w") as outputfile:
         outputfile.write(json.dumps(allLiveJourneysDict, indent=4))
-
-
-    from visualize_statMap import update_stat_delay_map, update_stat_notServiced_map
-    update_stat_delay_map(analysisStartDay, analysisEndDay, www_dir/"stat_map_delay_today.svg")
-    update_stat_notServiced_map(analysisStartDay, analysisEndDay, www_dir/"stat_map_notServiced_today.svg")
-
-    #render livemap
-    www_dir = base_dir/'www'
-    try:
-        from visualize_liveMap import render_liveMap
-        render_liveMap(www_dir/"currentRunningTrains.json", base_dir/"svg_source"/"live_map_source_light.svg", www_dir/"live_map.svg")
-    except Exception as e:
-        logging.error("during livemap render:\n%s", traceback.format_exc())
-
-
-    #upload
-    crawl_helperFunc.copy_www_to_webhost(www_dir)
-
-if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        logging.error("Unhandled exception:\n%s", traceback.format_exc())
-        raise

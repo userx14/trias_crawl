@@ -299,14 +299,14 @@ def render_nonServStatMap(startDay, endDay, inputSvgPath, outputSvgPath):
                 notServSum    = sum(station[2])
                 numberOfStops = len(station[2])
                 notServPerc   = 100*notServSum/numberOfStops
-                placeStationInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, notServPerc, f"not serviced: {notServPerc}%")
+                placeStationInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, notServPerc, f"Ausgefallen: {round(notServPerc,2)}%")
     with open(outputSvgPath, "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict, pretty=True))
 
 def render_delaySectionMap(startDay, endDay, inputSvgPath, outputSvgPath):
 
     svgDict, linesPathDict, _, cmap = parseSvg(inputSvgPath)
-    title = "Durchschnittliche Verspätungsänderung auf Streckenabschnitt, "
+    title = "Verspätungsänderung auf Streckenabschnitt, "
     if startDay.date() == endDay.date():
         title += f"am {startDay.strftime('%d.%m.%Y')}"
     else:
@@ -347,7 +347,6 @@ def render_delaySectionMap(startDay, endDay, inputSvgPath, outputSvgPath):
                 combinedDelayChange = sum(station[2])
                 numberOfStops = len(station[2])
                 averageDelayChange  = combinedDelayChange/numberOfStops
-                #placeStationInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, averageDelay, f"Durchschnittsverspätung: {round(averageDelay,2)} min")
                 placeSectionInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, averageDelayChange, None)
     with open(outputSvgPath, "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict, pretty=True))

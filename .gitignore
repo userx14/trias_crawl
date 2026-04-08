@@ -1,3 +1,4 @@
 *.key
 *.pyc
 *.db
+*.lock
