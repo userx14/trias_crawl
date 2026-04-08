@@ -9,12 +9,12 @@ import subprocess
 base_dir = Path(__file__).parent
 www_dir  = base_dir/'www'
 remote_webroot = 'bwp@p0ng.de:/var/www/html/trias/'
-"""
+
 try:
     crawler.getDelayData()
 except Exception:
     logging.error("Error during data crawling:\n%s", traceback.format_exc())
-"""
+
 try:
     visualizeSvg.render_liveMap(www_dir/"currentRunningTrains.json", base_dir/"svg_source/live_map_source_light.svg", www_dir/"live_map.svg")
     visualizeSvg.render_liveMap(www_dir/"currentRunningTrains.json", base_dir/"svg_source/live_map_source_dark.svg", www_dir/"live_map_dark.svg")

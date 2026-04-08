@@ -12,9 +12,9 @@ in {
   systemd.user.services.trias-crawler = {
     description = "Trias crawler";
     serviceConfig = {
-      ExecStart = "${pythonEnv}/bin/python /mnt/data/trias_crawl/crawlData.py";
+      ExecStart = "${pythonEnv}/bin/python /mnt/data/trias_crawl/main.py";
       Restart = "on-failure";
-      RestartSec = 60;
+      RestartSec = 120;
       StandardOutput = "journal";
       StandardError = "journal";
       Environment = "HOME=/home/pingu2";

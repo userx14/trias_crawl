@@ -9,7 +9,6 @@
       requests
       svgpathtools
       xmltodict
-
     ]);
   in
   {
