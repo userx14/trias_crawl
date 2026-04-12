@@ -303,10 +303,9 @@ def render_nonServStatMap(startDay, endDay, inputSvgPath, outputSvgPath):
     with open(outputSvgPath, "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict, pretty=True))
 
-def render_delaySectionMap(startDay, endDay, inputSvgPath, outputSvgPath):
-
+def render_delayChangeMap(startDay, endDay, inputSvgPath, outputSvgPath):
     svgDict, linesPathDict, _, cmap = parseSvg(inputSvgPath)
-    title = "Verspätungsänderung auf Streckenabschnitt, "
+    title = "Verspätungsänderung, "
     if startDay.date() == endDay.date():
         title += f"am {startDay.strftime('%d.%m.%Y')}"
     else:
@@ -314,40 +313,57 @@ def render_delaySectionMap(startDay, endDay, inputSvgPath, outputSvgPath):
         title += f"bis {endDay.strftime('%d.%m.%Y')}"
     changeMapTitle(svgDict, title)
 
-    #to store delay data
+    #to store delay data, first list for tracks, second list for stations
     delaySectionDict = copy.deepcopy(linesStations)
     for lineStations in delaySectionDict.values():
         for station in lineStations:
-            station.append([])
+            station.extend([[], []])
 
     def delayAnalysisCallback(journeyDict, stopDictList):
         for currentStopIdx in range(len(stopDictList) - 1):
             nextStopIdx = currentStopIdx + 1
             currentStopDict = stopDictList[currentStopIdx]
             nextStopDict = stopDictList[nextStopIdx]
-            startES = currentStopDict["departureEstimate"]
-            startTT = currentStopDict["departureTimetable"]
-            endES   = nextStopDict["arrivalEstimate"]
-            endTT   = nextStopDict["arrivalTimetable"]
-            if (startES is None) or (startTT is None) or (endES is None) or (endTT is None):
-                return
-            delayChange = ((endES-endTT) - (startES-startTT))/60
-            rawLineName             = journeyDict["lineName"]
-            lineName, currentStationIdx, _ = getStopIndices(rawLineName, linesPathDict, currentStopDict["stopPointRef"], currentStopDict["stopPointRef"])
-            _ , nextStationIdx, _ = getStopIndices(rawLineName, linesPathDict, nextStopDict["stopPointRef"], nextStopDict["stopPointRef"])
+            cArrES = currentStopDict["arrivalEstimate"]
+            cArrTT = currentStopDict["arrivalTimetable"]
+            cDepES = currentStopDict["departureEstimate"]
+            cDepTT = currentStopDict["departureTimetable"]
+            nArrES   = nextStopDict["arrivalEstimate"]
+            nArrTT   = nextStopDict["arrivalTimetable"]
 
-            if (currentStationIdx is None) or (nextStationIdx is None):
-                return
-            delaySectionDict[lineName][min(currentStationIdx, nextStationIdx)][2].append(delayChange)
+            #per station delay
+            if None not in [cDepES, cDepTT]:
+                if None not in [cArrES, cArrTT]:
+                    delayChangeStation = ((cDepES-cDepTT) - (cArrES-cArrTT))/60
+                else:
+                    delayChangeStation = (cDepES-cDepTT)/60
+                rawLineName             = journeyDict["lineName"]
+                lineName, currentStationIdx, _ = getStopIndices(rawLineName, linesPathDict, currentStopDict["stopPointRef"], currentStopDict["stopPointRef"])
+                if (currentStationIdx is not None):
+                    delaySectionDict[lineName][currentStationIdx][3].append(delayChangeStation)
+            if None not in [cDepES, cDepTT, nArrES, nArrTT]:
+                delayChangeTrack = ((nArrES-nArrTT) - (cDepES-cDepTT))/60
+                rawLineName             = journeyDict["lineName"]
+                lineName, currentStationIdx, _ = getStopIndices(rawLineName, linesPathDict, currentStopDict["stopPointRef"], currentStopDict["stopPointRef"])
+                _ , nextStationIdx, _ = getStopIndices(rawLineName, linesPathDict, nextStopDict["stopPointRef"], nextStopDict["stopPointRef"])
+                if (currentStationIdx is not None) and (nextStationIdx is not None):
+                    delaySectionDict[lineName][min(currentStationIdx, nextStationIdx)][2].append(delayChangeTrack)
+
 
     analyze_data(delayAnalysisCallback, startDay, endDay, perJourneyCallback = True)
     for lineName, lineStations in delaySectionDict.items():
         for stationIdx, station in enumerate(lineStations):
             if len(station[2]) != 0:
                 combinedDelayChange = sum(station[2])
-                numberOfStops = len(station[2])
+                numberOfStops       = len(station[2])
                 averageDelayChange  = combinedDelayChange/numberOfStops
                 placeSectionInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, averageDelayChange, None)
+            if len(station[3]) != 0:
+                combinedDelayChange = sum(station[3])
+                numberOfStops       = len(station[3])
+                averageDelayChange  = combinedDelayChange/numberOfStops
+                placeStationInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, averageDelayChange, None)
+
     with open(outputSvgPath, "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict, pretty=True))
 
@@ -495,4 +511,4 @@ if __name__ == "__main__":
     render_nonServStatMap(now+timedelta(days=-1), now+timedelta(days=-1), "./svg_source/stat_map_delay_source.svg", "./stat_map_nonServ_yesterday.svg")
     render_nonServStatMap(now+timedelta(days=-7), now,                    "./svg_source/stat_map_delay_source.svg", "./stat_map_nonServ_lastWeek.svg")
 
-    render_delaySectionMap(now, now, "./svg_source/stat_map_delayChange_source.svg", "./stat_map_delay_section_today.svg")
+    render_delayChangeMap(now, now, "./svg_source/stat_map_delayChange_source.svg", "./stat_map_delay_section_today.svg")

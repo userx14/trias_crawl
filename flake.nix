@@ -9,6 +9,7 @@
       requests
       svgpathtools
       xmltodict
+      matplotlib
     ]);
   in
   {
