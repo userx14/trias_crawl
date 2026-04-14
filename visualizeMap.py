@@ -1,4 +1,4 @@
-from svgpathtools        import parse_path
+from svgpathtools        import parse_path, Line, CubicBezier, Arc
 from svgpathtools        import Path as SvgPath
 from svgpathtools.parser import parse_transform
 from svgpathtools.path   import translate, rotate, scale
@@ -158,7 +158,7 @@ def getStopIndices(rawLineName, linesPathDict, currentStopRef, nextStopRef):
             return None, None, None
     return lineName, currStationIdx, nextStationIdx
 
-def getStationPosFromPath(lineName, linesPathDict, currStationIdx):
+def getStationPosAndTangFromPath(lineName, linesPathDict, currStationIdx):
     currentLineStations = linesStations[lineName]
     linePath = linesPathDict[lineName]
     parsedPath = parse_path(linePath["@d"])
@@ -166,10 +166,12 @@ def getStationPosFromPath(lineName, linesPathDict, currStationIdx):
     if segmentIdx != len(parsedPath):
         activeSegment = parsedPath[segmentIdx]
         position = activeSegment.point(0)
+        tangent = activeSegment.derivative(1)
     else:
         activeSegment = parsedPath[segmentIdx - 1]
         position = activeSegment.point(1)
-    return position
+        tangent = activeSegment.derivative(1)
+    return position, tangent
 
 def makeColormap(stops, colors):
     colors = [tuple(int(c[i:i+2], 16) for i in (1, 3, 5)) for c in colors]
@@ -231,37 +233,105 @@ def analyze_data(callbackAnalysis, analysisDayStart, analysisDayEnd, perJourneyC
     connection.close()
 
 
-def placeStationInfo(svgDict, linesPathDict, lineName, stationIdx, colormap, value, hoverText):
-    if "circle" not in svgDict["svg"].keys():
-        svgDict["svg"]["circle"] = []
-    position = getStationPosFromPath(lineName, linesPathDict, stationIdx)
-    circle = {
-        "@cx":   position.real,
-        "@cy":   position.imag,
-        "@r":    "8",
-        "@fill": colormap(value),
-        "title": hoverText
-    }
-    svgDict["svg"]["circle"].append(circle)
+def placeStationInfo(svgDict, linesPathDict, lineName, stationIdx, colormap, value, hoverText, direction=None):
+    circleRad = 8
+    position, tangent = getStationPosAndTangFromPath(lineName, linesPathDict, stationIdx)
+    if direction == None:
+        if "circle" not in svgDict["svg"].keys():
+            svgDict["svg"]["circle"] = []
+        circle = {
+            "@cx":   position.real,
+            "@cy":   position.imag,
+            "@r":    str(circleRad),
+            "@fill": colormap(value),
+            "title": hoverText
+        }
+        svgDict["svg"]["circle"].append(circle)
+        return
+    tangent /= abs(tangent)
+    if direction == "Fw":
+        startPos = position+tangent*circleRad
+        endPos   = position-tangent*circleRad
+    elif direction == "Bw":
+        startPos = position-tangent*circleRad
+        endPos   = position+tangent*circleRad
+    else:
+        raise ValueError("unsupported direction argument")
+    semicircleArc = Arc(start = startPos, radius = circleRad + 1j*circleRad, end = endPos,
+                    rotation=0, large_arc=False, sweep=True)
+    semicirclePath = SvgPath(semicircleArc, Line(start=endPos, end=startPos))
+    semicirclePath.closed = True
+    if "path" not in svgDict["svg"]:
+        svgDict["svg"]["path"] = []
 
-def placeSectionInfo(svgDict, linesPathDict, lineName, stationIdx, colormap, value, hoverText):
+    svgDict["svg"]["path"].append({
+        "@d":      semicirclePath.d(),
+        "@fill":   colormap(value),
+        "@stroke": "none",
+        "title":   hoverText
+    })
+    return
+
+def placeSectionInfo(svgDict, linesPathDict, lineName, stationIdx, colormap, value, hoverText, direction=None):
+    def getPathNormal(segment):
+        segment.derivative()
+
+    def getOffsetPath(parsedPath, tangentialOffset):
+        offsetPathResult = []
+        for segment in parsedPath:
+            if isinstance(segment, Line):
+                complexDer = segment.derivative(0)
+                complexDer /= abs(complexDer)
+                offsetVec  = complex(complexDer.imag, -complexDer.real)*tangentialOffset
+                newLine    = Line(segment.start+offsetVec, segment.end+offsetVec)
+                offsetPathResult.append(newLine)
+            elif isinstance(segment, CubicBezier):
+                complexDerStart = segment.derivative(0)
+                complexDerStart /= abs(complexDerStart)
+                complexDerStart  = complex(complexDerStart.imag, -complexDerStart.real)*tangentialOffset
+
+                complexDerMiddle = segment.derivative(0.5)
+                complexDerMiddle /= abs(complexDerMiddle)
+                complexDerMiddle = complex(complexDerMiddle.imag, -complexDerMiddle.real)*tangentialOffset
+
+                complexDerEnd   = segment.derivative(1)
+                complexDerEnd  /= abs(complexDerEnd)
+                complexDerEnd    = complex(complexDerEnd.imag, -complexDerEnd.real)*tangentialOffset
+                newCBezier = CubicBezier(
+                    segment.start    + complexDerStart,
+                    segment.control1 + complexDerMiddle,
+                    segment.control2 + complexDerMiddle,
+                    segment.end      + complexDerEnd)
+                offsetPathResult.append(newCBezier)
+            else:
+                raise ValueError("unsupported path segment type")
+        return offsetPathResult
     #find group that contains S-Bahn paths
     for group in svgDict["svg"]["g"]:
         if group["@id"] == "g2":
             break
     linePath = linesPathDict[lineName]
-    currentLineStations = linesStations[lineName]
     parsedPath = parse_path(linePath["@d"])
+    originalStrokeWidth = int(linePath["@stroke-width"])
     startSegmentIdx = segmBetweenStops*stationIdx
-    endSegmentIdx = startSegmentIdx+3
-    dString = SvgPath(*parsedPath[startSegmentIdx: endSegmentIdx]).d()
+    if direction == None:
+        newStrokeWidth = originalStrokeWidth
+        dString        = SvgPath(*parsedPath[startSegmentIdx:startSegmentIdx+3]).d()
+    elif direction == "Fw":
+        newStrokeWidth = 0.5 * originalStrokeWidth
+        offsetPath     = getOffsetPath(parsedPath, -(originalStrokeWidth-newStrokeWidth)/2)
+        dString        = SvgPath(*offsetPath[startSegmentIdx:startSegmentIdx+3]).d()
+    elif direction == "Bw":
+        newStrokeWidth = 0.5 * originalStrokeWidth
+        offsetPath     = getOffsetPath(parsedPath, (originalStrokeWidth-newStrokeWidth)/2)
+        dString        = SvgPath(*offsetPath[startSegmentIdx:startSegmentIdx+3]).d()
     style = re.sub(r"stroke:[^;]+", f"stroke:{colormap(value)}", linePath["@style"])
 
     group["path"].append({
         "@d":            dString,
         "@stroke":       linePath["@stroke"],
         "@style":        style,
-        "@stroke-width": linePath["@stroke-width"],
+        "@stroke-width": str(newStrokeWidth),
         "title":         hoverText,
     })
 
@@ -303,6 +373,50 @@ def render_nonServStatMap(startDay, endDay, inputSvgPath, outputSvgPath):
     with open(outputSvgPath, "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict, pretty=True))
 
+
+def render_numberOfTrainsMap(startDay, endDay, inputSvgPath, outputSvgPath):
+    svgDict, linesPathDict, _, cmap = parseSvg(inputSvgPath)
+    title = "Anzahl Züge, "
+    if startDay.date() == endDay.date():
+        title += f"am {startDay.strftime('%d.%m.%Y')}"
+    else:
+        title += f"vom {startDay.strftime('%d.%m.%Y')} "
+        title += f"bis {endDay.strftime('%d.%m.%Y')}"
+    changeMapTitle(svgDict, title)
+
+    #to store delay data, first list for tracks, second list for stations
+    delaySectionDict = copy.deepcopy(linesStations)
+    for lineStations in delaySectionDict.values():
+        for station in lineStations:
+            station.append(0)
+
+    def delayAnalysisCallback(journeyDict, stopDictList):
+        for currentStopIdx in range(len(stopDictList)-1):
+            nextStopIdx = currentStopIdx + 1
+            currentStopDict = stopDictList[currentStopIdx]
+            nextStopDict = stopDictList[nextStopIdx]
+            lineName, currentStationIdx, nextStationIdx = getStopIndices(journeyDict["lineName"], linesPathDict, currentStopDict["stopPointRef"], nextStopDict["stopPointRef"])
+            if currentStationIdx < nextStationIdx:
+                delaySectionDict[lineName][currentStationIdx][2] += 1
+            else:
+                delaySectionDict[lineName][nextStationIdx][2] += 1
+
+    analyze_data(delayAnalysisCallback, startDay, endDay, perJourneyCallback = True)
+    maxTrains = 0
+    for lineName, lineStations in delaySectionDict.items():
+        for stationIdx, station in enumerate(lineStations):
+            maxTrains = max(maxTrains, station[2])
+    if maxTrains == 0:
+        logging.error("No data for number of trains")
+        return
+    for lineName, lineStations in delaySectionDict.items():
+        for stationIdx, station in enumerate(lineStations):
+            realtiveNumberOfTrains = station[2] / maxTrains
+            placeSectionInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, realtiveNumberOfTrains, None)
+
+    with open(outputSvgPath, "w") as outputSvg:
+        outputSvg.write(xmltodict.unparse(svgDict, pretty=True))
+
 def render_delayChangeMap(startDay, endDay, inputSvgPath, outputSvgPath):
     svgDict, linesPathDict, _, cmap = parseSvg(inputSvgPath)
     title = "Verspätungsänderung, "
@@ -317,7 +431,7 @@ def render_delayChangeMap(startDay, endDay, inputSvgPath, outputSvgPath):
     delaySectionDict = copy.deepcopy(linesStations)
     for lineStations in delaySectionDict.values():
         for station in lineStations:
-            station.extend([[], []])
+            station.append({"trackFw": [], "trackBw": [], "stationFw": [], "stationBw": []})
 
     def delayAnalysisCallback(journeyDict, stopDictList):
         for currentStopIdx in range(len(stopDictList) - 1):
@@ -330,6 +444,7 @@ def render_delayChangeMap(startDay, endDay, inputSvgPath, outputSvgPath):
             cDepTT = currentStopDict["departureTimetable"]
             nArrES   = nextStopDict["arrivalEstimate"]
             nArrTT   = nextStopDict["arrivalTimetable"]
+            lineName, currentStationIdx, nextStationIdx = getStopIndices(journeyDict["lineName"], linesPathDict, currentStopDict["stopPointRef"], nextStopDict["stopPointRef"])
 
             #per station delay
             if None not in [cDepES, cDepTT]:
@@ -337,32 +452,33 @@ def render_delayChangeMap(startDay, endDay, inputSvgPath, outputSvgPath):
                     delayChangeStation = ((cDepES-cDepTT) - (cArrES-cArrTT))/60
                 else:
                     delayChangeStation = (cDepES-cDepTT)/60
-                rawLineName             = journeyDict["lineName"]
-                lineName, currentStationIdx, _ = getStopIndices(rawLineName, linesPathDict, currentStopDict["stopPointRef"], currentStopDict["stopPointRef"])
-                if (currentStationIdx is not None):
-                    delaySectionDict[lineName][currentStationIdx][3].append(delayChangeStation)
+                if currentStationIdx < nextStationIdx:
+                    delaySectionDict[lineName][currentStationIdx][2]["stationFw"].append(delayChangeStation)
+                else:
+                    delaySectionDict[lineName][currentStationIdx][2]["stationBw"].append(delayChangeStation)
             if None not in [cDepES, cDepTT, nArrES, nArrTT]:
                 delayChangeTrack = ((nArrES-nArrTT) - (cDepES-cDepTT))/60
-                rawLineName             = journeyDict["lineName"]
-                lineName, currentStationIdx, _ = getStopIndices(rawLineName, linesPathDict, currentStopDict["stopPointRef"], currentStopDict["stopPointRef"])
-                _ , nextStationIdx, _ = getStopIndices(rawLineName, linesPathDict, nextStopDict["stopPointRef"], nextStopDict["stopPointRef"])
-                if (currentStationIdx is not None) and (nextStationIdx is not None):
-                    delaySectionDict[lineName][min(currentStationIdx, nextStationIdx)][2].append(delayChangeTrack)
+                if currentStationIdx < nextStationIdx:
+                    delaySectionDict[lineName][currentStationIdx][2]["trackFw"].append(delayChangeTrack)
+                else:
+                    delaySectionDict[lineName][nextStationIdx][2]["trackBw"].append(delayChangeTrack)
 
 
     analyze_data(delayAnalysisCallback, startDay, endDay, perJourneyCallback = True)
     for lineName, lineStations in delaySectionDict.items():
         for stationIdx, station in enumerate(lineStations):
-            if len(station[2]) != 0:
-                combinedDelayChange = sum(station[2])
-                numberOfStops       = len(station[2])
-                averageDelayChange  = combinedDelayChange/numberOfStops
-                placeSectionInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, averageDelayChange, None)
-            if len(station[3]) != 0:
-                combinedDelayChange = sum(station[3])
-                numberOfStops       = len(station[3])
-                averageDelayChange  = combinedDelayChange/numberOfStops
-                placeStationInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, averageDelayChange, None)
+            for stationDir in ["stationFw", "stationBw"]:
+                stationDelayList = station[2][stationDir]
+                if len(stationDelayList) == 0:
+                    continue
+                averageDelayChange = sum(stationDelayList)/len(stationDelayList)
+                placeStationInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, averageDelayChange, None, direction=stationDir[-2:])
+            for trackDir in ["trackFw", "trackBw"]:
+                trackDelayList = station[2][trackDir]
+                if len(trackDelayList) == 0:
+                    continue
+                averageDelayChange = sum(trackDelayList)/len(trackDelayList)
+                placeSectionInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, averageDelayChange, None, direction=stationDir[-2:])
 
     with open(outputSvgPath, "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict, pretty=True))
@@ -433,6 +549,7 @@ def getTrainIcon(trainIconDict, delay, trainPosition, angle):
     trainIcon.pop("@transform", None)
     trainIcon.pop("@inkscape:original-d", None)
     return trainIcon
+
 
 def getPosAngleFromPath(lineName, linesPathDict, currStationIdx, nextStationIdx, progress):
     currentLineStations = linesStations[lineName]

@@ -220,7 +220,6 @@ def render_statGraph(startDay, endDay, outputSvgPath):
     plt.show()
 
 
-now       = datetime.now().astimezone()
-yesterday = now+timedelta(days=-1)
-
-render_statGraph(yesterday, now, "output.svg")
+#now       = datetime.now().astimezone()
+#yesterday = now+timedelta(days=-1)
+#render_statGraph(yesterday, now, "output.svg")

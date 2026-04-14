@@ -29,22 +29,25 @@ except Exception:
 
 try:
     now       = datetime.now()
-    yesterday = now+timedelta(days=-1)
+    timeRangeDict = {
+        "today": (now, now),
+        "yesterday": (now+timedelta(days=-1), now+timedelta(days=-1)),
+        "lastWeek": (now+timedelta(days=-7), now)
+    }
 
-    delMapSource = base_dir / "svg_source" / "stat_map_delay_light.svg"
-    visualizeMap.render_delayStatMap(now, now,                    delMapSource, www_dir/"stat_map_delay_today.svg")
-    visualizeMap.render_delayStatMap(yesterday, yesterday,        delMapSource, www_dir/"stat_map_delay_yesterday.svg")
-    visualizeMap.render_delayStatMap(now+timedelta(days=-7), now, delMapSource, www_dir/"stat_map_delay_lastWeek.svg")
+    for timeRangeName, timeRange in timeRangeDict.items():
+        delMapSource = base_dir / "svg_source" / "stat_map_delay_light.svg"
+        visualizeMap.render_delayStatMap(*timeRange, delMapSource, www_dir/f"stat_map_delay_{timeRangeName}.svg")
 
-    nosMapSource = base_dir / "svg_source" / "stat_map_notServ_light.svg"
-    visualizeMap.render_nonServStatMap(now, now,                    nosMapSource, www_dir/"stat_map_nonServ_today.svg")
-    visualizeMap.render_nonServStatMap(yesterday, yesterday,        nosMapSource, www_dir/"stat_map_nonServ_yesterday.svg")
-    visualizeMap.render_nonServStatMap(now+timedelta(days=-7), now, nosMapSource, www_dir/"stat_map_nonServ_lastWeek.svg")
+        nosMapSource = base_dir / "svg_source" / "stat_map_notServ_light.svg"
+        visualizeMap.render_nonServStatMap(*timeRange, nosMapSource, www_dir/f"stat_map_nonServ_{timeRangeName}.svg")
 
-    deltaDMapSource = base_dir / "svg_source" / "stat_map_delayChange_light.svg"
-    visualizeMap.render_delayChangeMap(now, now, deltaDMapSource, www_dir/"stat_map_delaySection_today.svg")
-    visualizeMap.render_delayChangeMap(yesterday, yesterday, deltaDMapSource, www_dir/"stat_map_delaySection_yesterday.svg")
-    visualizeMap.render_delayChangeMap(now+timedelta(days=-7), now, deltaDMapSource, www_dir/"stat_map_delaySection_lastWeek.svg")
+        deltaDMapSource = base_dir / "svg_source" / "stat_map_delayChange_light.svg"
+        visualizeMap.render_delayChangeMap(*timeRange, deltaDMapSource, www_dir/f"stat_map_delaySection_{timeRangeName}.svg")
+
+        numTrainsSource = base_dir / "svg_source" / "stat_map_numTrains_light.svg"
+        visualizeMap.render_numberOfTrainsMap(*timeRange, numTrainsSource, www_dir/f"stat_map_numTrains_{timeRangeName}.svg")
+
 except Exception:
     logging.error("Error during stat map rendering:\n%s", traceback.format_exc())
 """
