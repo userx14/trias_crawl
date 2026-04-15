@@ -119,7 +119,7 @@ def render_statGraph(startDay, endDay, outputSvgPath):
         operatingDayAfter  = analysisDateTime + timedelta(days=1)
         operatingDayAfter  = operatingDayAfter.astimezone(timezone.utc)
         operatingDayAfter  = operatingDayAfter.replace(hour=0, minute=0, second=0, microsecond=0)
-        operatingDayAfter = int(operatingDayAfter.timestamp())
+        operatingDayAfter  = int(operatingDayAfter.timestamp())
 
         connection         = sqlite3.connect(db_data_source)
         cursor             = connection.cursor()
@@ -168,6 +168,8 @@ def render_statGraph(startDay, endDay, outputSvgPath):
                 allLiveJourneys.append(liveJourn)
             except JourneyProcessError as e:
                 pass
+            except Exception as e:
+                logging.error(f"could not initialize live journey {e} {journeyDict["journeyRef"]}")
         connection.close()
         return allLiveJourneys
     timesteps = np.arange(startDay, endDay, np.timedelta64(30, 'm'))
@@ -198,7 +200,8 @@ def render_statGraph(startDay, endDay, outputSvgPath):
     for lineName, delayTimestepList in averageDelayPerLine.items():
         print(f"{lineName} {len(delayTimestepList)}")
 
-    fig, axs = plt.subplots(len(averageDelayPerLine)+1)
+    fig, axs = plt.subplots(len(averageDelayPerLine)+1, squeeze=False)
+    axs = axs.flatten()
     axs[0].plot(timesteps, averageDelayAllLines, label="Alle Linien", color="black")
     axs[0].legend(loc="upper right")
     for axsIdx, (lineName, delaysOnLine) in enumerate(averageDelayPerLine.items()):
@@ -210,15 +213,15 @@ def render_statGraph(startDay, endDay, outputSvgPath):
     fig.supylabel("Durchschnittsverspätung in Minuten")
     fig.tight_layout(pad=1.0)
     plt.subplots_adjust(hspace=0.4)
-    plt.show()
-
+    fig.savefig(outputSvgPath)
+"""
     plt.figure()
     plt.plot(timesteps, maxDelayAllLines, label="Maximalverspätung")
     plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%d.%m.%y\n%H:%M'))
     plt.gcf().autofmt_xdate()  # dreht Labels automatisch
     plt.legend()
-    plt.show()
-
+    fig.savefig()
+"""
 
 #now       = datetime.now().astimezone()
 #yesterday = now+timedelta(days=-1)

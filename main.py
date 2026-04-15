@@ -10,12 +10,19 @@ import subprocess
 base_dir = Path(__file__).parent
 www_dir  = base_dir/'www'
 remote_webroot = 'bwp@p0ng.de:/var/www/html/trias/'
-"""
+
+now       = datetime.now()
+timeRangeDict = {
+    "today": (now, now),
+    "yesterday": (now+timedelta(days=-1), now+timedelta(days=-1)),
+    "lastWeek": (now+timedelta(days=-7), now)
+}
+
 try:
     crawler.getDelayData()
 except Exception:
     logging.error("Error during data crawling:\n%s", traceback.format_exc())
-"""
+
 try:
     visualizeMap.render_liveMap(www_dir/"currentRunningTrains.json", base_dir/"svg_source/live_map_source_light.svg", www_dir/"live_map.svg")
     visualizeMap.render_liveMap(www_dir/"currentRunningTrains.json", base_dir/"svg_source/live_map_source_dark.svg", www_dir/"live_map_dark.svg")
@@ -24,17 +31,14 @@ except Exception:
 
 try:
     visualizeGraph.render_liveGraph(www_dir/"currentRunningTrains.json", www_dir/"live_graph.svg")
+    """
+    for timeRangeName, timeRange in timeRangeDict.items():
+        visualizeGraph.render_statGraph(*timeRange, www_dir/f"stat_graph_{timeRangeName}.svg")
+    """
 except Exception:
     logging.error("Error during live map rendering:\n%s", traceback.format_exc())
 
 try:
-    now       = datetime.now()
-    timeRangeDict = {
-        "today": (now, now),
-        "yesterday": (now+timedelta(days=-1), now+timedelta(days=-1)),
-        "lastWeek": (now+timedelta(days=-7), now)
-    }
-
     for timeRangeName, timeRange in timeRangeDict.items():
         delMapSource = base_dir / "svg_source" / "stat_map_delay_light.svg"
         visualizeMap.render_delayStatMap(*timeRange, delMapSource, www_dir/f"stat_map_delay_{timeRangeName}.svg")
@@ -50,7 +54,7 @@ try:
 
 except Exception:
     logging.error("Error during stat map rendering:\n%s", traceback.format_exc())
-"""
+
 #upload
 for src_path in www_dir.iterdir():
     scp_command = ['/run/current-system/sw/bin/scp', src_path, remote_webroot]
@@ -58,4 +62,4 @@ for src_path in www_dir.iterdir():
         subprocess.run(scp_command, check=True)
     except subprocess.CalledProcessError as e:
         logging.error(f"Error during file copy: {e}")
-"""
+
