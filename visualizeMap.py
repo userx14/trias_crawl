@@ -478,7 +478,7 @@ def render_delayChangeMap(startDay, endDay, inputSvgPath, outputSvgPath):
                 if len(trackDelayList) == 0:
                     continue
                 averageDelayChange = sum(trackDelayList)/len(trackDelayList)
-                placeSectionInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, averageDelayChange, None, direction=stationDir[-2:])
+                placeSectionInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, averageDelayChange, None, direction=trackDir[-2:])
 
     with open(outputSvgPath, "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict, pretty=True))
