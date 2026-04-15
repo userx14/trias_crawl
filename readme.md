@@ -6,7 +6,7 @@ The frequently refreshed output of the code can be viewed [here](https://p0ng.de
 ![demo screenshot](exampleLivemap.png)
 
 ## Requirements
-The project needs python with the libraries requests, svgpathtools and xmltodict.
+The project needs python with the libraries requests, svgpathtools, matplotlib and xmltodict.
 On nixos it is possible to initialize a temporary development environment with the `nix develop` command.
 
 ## Notes on setting up the webserver

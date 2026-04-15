@@ -43,7 +43,7 @@ def render_liveGraph(inputDataJsonPath, svgOutPath):
     for journeyRef, journey in runningTrainsDict.items():
         sBahnDelays.setdefault(journey["lineName"], []).append(journey["delayMinutes"])
 
-    categories     = ["< 3 Min", "3 - 6 Min", "> 6 Min", "ausgefallen"]
+    categories     = ["< 3 Min", "3 - 5 Min", "> 5 Min", "ausgefallen"]
     categoryColors = ["green", "orange", "red", "grey"]
     fig, ax = plt.subplots()
 
@@ -55,7 +55,7 @@ def render_liveGraph(inputDataJsonPath, svgOutPath):
                 sBahnDelayCatCounter[lineName][3] += 1
             elif (delay < 3):
                 sBahnDelayCatCounter[lineName][0] += 1
-            elif (3 <= delay) and (delay < 6):
+            elif (3 <= delay) and (delay < 5):
                 sBahnDelayCatCounter[lineName][1] += 1
             else:
                 sBahnDelayCatCounter[lineName][2] += 1

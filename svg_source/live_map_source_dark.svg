@@ -22,14 +22,14 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="1.4156606"
-     inkscape:cx="1095.9548"
-     inkscape:cy="1656.8237"
+     inkscape:cx="387.45163"
+     inkscape:cy="441.13681"
      inkscape:window-width="1920"
      inkscape:window-height="1008"
      inkscape:window-x="0"
      inkscape:window-y="0"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg201"
+     inkscape:current-layer="g8"
      showguides="true"
      showgrid="false">
     <sodipodi:guide
@@ -472,16 +472,16 @@
        x="220.51712"
        y="403.10284"
        font-family="sans-serif"
-       font-size="24"
+       font-size="24px"
        fill="#ffffff"
-       id="text7">3 - 6</text>
+       id="text7">3 - 5</text>
     <text
        x="220.85075"
        y="453.86859"
        font-family="sans-serif"
-       font-size="24"
+       font-size="24px"
        fill="#ffffff"
-       id="text8">6 - 15</text>
+       id="text8">5 - 15</text>
     <text
        x="235.22198"
        y="504.00342"

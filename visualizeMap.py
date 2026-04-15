@@ -529,7 +529,7 @@ def render_delayStatMap(startDay, endDay, inputSvgPath, outputSvgPath):
 def getTrainIcon(trainIconDict, delay, trainPosition, angle):
     if delay <= 3:
         trainIcon = trainIconDict["delay0"]
-    elif delay <= 6:
+    elif delay <= 5:
         trainIcon = trainIconDict["delay3"]
     elif delay <= 15:
         trainIcon = trainIconDict["delay6"]
