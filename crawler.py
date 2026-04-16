@@ -95,7 +95,7 @@ class Journey:
 
         stopIndexOffset = 0
         for stopCall in allStopCalls:
-            s = Stop(stopCall["CallAtStop"])
+            s = Stop(stopCall["CallAtStop"], stopIndexOffset)
             if self.stops and s.stopPointRef == self.stops[-1].stopPointRef:
                 stopIndexOffset -= 1
                 continue
