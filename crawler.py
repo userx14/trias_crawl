@@ -101,6 +101,12 @@ class Journey:
                 continue
             self.stops.append(s)
 
+        for stopIdx, stop in enumerate(self.stops):
+            if (stopIdx != 0) and (stop.arrivalTimetable is None):
+                raise JourneyProcessError(f"Missing timetable data, skipped {-stopIndexOffset}")
+            if (stopIdx != len(self.stops)-1) and (stop.departureTimetable is None):
+                raise JourneyProcessError(f"Missing timetable data, skipped {-stopIndexOffset}")
+
         #process booleans
         self.isCancelled = (serviceData.get("Cancelled") == "true")
         self.isUnplanned = (serviceData.get("Unplanned") == "true")
