@@ -374,7 +374,7 @@ def getDelayData():
                 ignoredStopEventCounter += 1
             except Exception:
                 logging.exception(f"Error while processing stopEvent: {stopEvent}")
-        print(f"using {len(allStopEventList)-ignoredStopEventCounter} / {len(allStopEventList)} journeys")
+        print(f"using {len(allStopEventList)-ignoredStopEventCounter} / {len(allStopEventList)} journeys in {stationTuple[0]}")
     sqlConnection.close()
 
     #write live data into json

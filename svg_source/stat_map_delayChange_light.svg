@@ -22,9 +22,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="0.6960437"
-     inkscape:cx="930.25768"
-     inkscape:cy="667.34316"
+     inkscape:zoom="0.51200423"
+     inkscape:cx="1143.5452"
+     inkscape:cy="743.15792"
      inkscape:window-width="1920"
      inkscape:window-height="1008"
      inkscape:window-x="0"
@@ -52,6 +52,11 @@
        position="307.89316,1751.479"
        orientation="1,0"
        id="guide10"
+       inkscape:locked="false" />
+    <sodipodi:guide
+       position="314.45426,1697.0853"
+       orientation="1,0"
+       id="guide1"
        inkscape:locked="false" />
   </sodipodi:namedview>
   <rect
@@ -2213,7 +2218,7 @@
      x="89.056389"
      y="245.17744"
      width="447.52441"
-     height="441.37314"
+     height="516.08112"
      rx="36"
      stroke="#008d4f"
      stroke-width="8"
@@ -2246,7 +2251,7 @@
        id="tspan3"
        x="103.16982"
        y="399.91644"
-       style="font-size:37.3333px;stroke:none">-5 min</tspan></text>
+       style="font-size:37.3333px;stroke:none">-3 min</tspan></text>
   <text
      xml:space="preserve"
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:37.3333px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
@@ -2261,35 +2266,46 @@
   <text
      xml:space="preserve"
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:32px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-     x="135.71848"
-     y="547.18024"
+     x="157.31276"
+     y="619.53967"
      id="text3-3-2"><tspan
        sodipodi:role="line"
-       x="135.71848"
-       y="547.18024"
+       x="157.31276"
+       y="619.53967"
        style="font-size:32px;stroke:none"
        id="tspan12" /><tspan
        sodipodi:role="line"
-       x="135.71848"
-       y="587.18024"
+       x="157.31276"
+       y="659.53967"
        style="font-size:32px;stroke:none"
-       id="tspan13">(in Fahrtrichtung rechts)</tspan></text>
+       id="tspan13">in Fahrtrichtung rechts</tspan></text>
   <text
      xml:space="preserve"
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:32px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-     x="135.71848"
-     y="545.18024"
+     x="150.00075"
+     y="615.56232"
      id="text3-3-2-7"><tspan
        sodipodi:role="line"
-       x="135.71848"
-       y="545.18024"
+       x="150.00075"
+       y="615.56232"
        style="font-size:32px;stroke:none"
        id="tspan12-3">aufgeteilt nach Richtung</tspan><tspan
        sodipodi:role="line"
-       x="135.71848"
-       y="585.18024"
+       x="150.00075"
+       y="655.56232"
        style="font-size:32px;stroke:none"
        id="tspan13-6" /></text>
+  <text
+     xml:space="preserve"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:32px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+     x="143.40749"
+     y="525.39764"
+     id="text3-3-2-7-6"><tspan
+       sodipodi:role="line"
+       x="143.40749"
+       y="525.39764"
+       style="font-size:32px;stroke:none"
+       id="tspan13-6-5">vorheriger Halt + Strecke</tspan></text>
   <text
      xml:space="preserve"
      style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:37.3333px;font-family:Bahnschrift;-inkscape-font-specification:'Bahnschrift Semi-Condensed';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
@@ -2300,9 +2316,10 @@
        id="tspan3-2"
        x="426.83292"
        y="400.28406"
-       style="font-size:37.3333px;stroke:none">5 min</tspan></text>
+       style="font-size:37.3333px;stroke:none">3 min</tspan></text>
   <g
-     id="g14">
+     id="g14"
+     transform="translate(0,63.214422)">
     <path
        style="fill:none;stroke:#ff8200;stroke-width:10;stroke-linecap:square;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
        d="m 240.06649,634.35289 h 149.1221"

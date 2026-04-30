@@ -431,7 +431,7 @@ def render_delayChangeMap(startDay, endDay, inputSvgPath, outputSvgPath):
     delaySectionDict = copy.deepcopy(linesStations)
     for lineStations in delaySectionDict.values():
         for station in lineStations:
-            station.append({"trackFw": [], "trackBw": [], "stationFw": [], "stationBw": []})
+            station.append({"trackFw": [], "trackBw": []})
 
     def delayAnalysisCallback(journeyDict, stopDictList):
         for currentStopIdx in range(len(stopDictList) - 1):
@@ -453,9 +453,9 @@ def render_delayChangeMap(startDay, endDay, inputSvgPath, outputSvgPath):
                 else:
                     delayChangeStation = (cDepES-cDepTT)/60
                 if currentStationIdx < nextStationIdx:
-                    delaySectionDict[lineName][currentStationIdx][2]["stationFw"].append(delayChangeStation)
+                    delaySectionDict[lineName][currentStationIdx][2]["trackFw"].append(delayChangeStation)
                 else:
-                    delaySectionDict[lineName][currentStationIdx][2]["stationBw"].append(delayChangeStation)
+                    delaySectionDict[lineName][nextStationIdx][2]["trackBw"].append(delayChangeStation)
             if None not in [cDepES, cDepTT, nArrES, nArrTT]:
                 delayChangeTrack = ((nArrES-nArrTT) - (cDepES-cDepTT))/60
                 if currentStationIdx < nextStationIdx:
@@ -467,12 +467,6 @@ def render_delayChangeMap(startDay, endDay, inputSvgPath, outputSvgPath):
     analyze_data(delayAnalysisCallback, startDay, endDay, perJourneyCallback = True)
     for lineName, lineStations in delaySectionDict.items():
         for stationIdx, station in enumerate(lineStations):
-            for stationDir in ["stationFw", "stationBw"]:
-                stationDelayList = station[2][stationDir]
-                if len(stationDelayList) == 0:
-                    continue
-                averageDelayChange = sum(stationDelayList)/len(stationDelayList)
-                placeStationInfo(svgDict, linesPathDict, lineName, stationIdx, cmap, averageDelayChange, None, direction=stationDir[-2:])
             for trackDir in ["trackFw", "trackBw"]:
                 trackDelayList = station[2][trackDir]
                 if len(trackDelayList) == 0:
@@ -585,6 +579,8 @@ def placeTrains(svgDict, linesPathDict, trainIconDict, runningTrains):
         nStopRef    = trainData["nextStopRef"]
         lineName, cStatIdx, nStatIdx = getStopIndices(rawLineName, linesPathDict, cStopRef, nStopRef)
         if lineName is None:
+            continue
+        if trainData["isCancelled"]:
             continue
         delay           = trainData["delayMinutes"]
         progress        = trainData["progressNextStop"]
