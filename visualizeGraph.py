@@ -48,8 +48,12 @@ def render_liveGraph(inputDataJsonPath, svgOutPath):
     fig, ax = plt.subplots()
 
     sBahnDelayCatCounter = {}
-    for lineName, delays in sBahnDelays.items():
+    sBahnDelayAvg = {}
+    sBahnDelayMax = {}
+    for lineName, delays in dict(sorted(sBahnDelays.items())).items():
         sBahnDelayCatCounter[lineName] = [0,0,0,0]
+        sBahnDelayAvg[lineName] = np.round(np.mean(delays),2)
+        sBahnDelayMax[lineName] = np.round(np.amax(delays),2)
         for delay in delays:
             if delay is None:
                 sBahnDelayCatCounter[lineName][3] += 1
@@ -59,10 +63,10 @@ def render_liveGraph(inputDataJsonPath, svgOutPath):
                 sBahnDelayCatCounter[lineName][1] += 1
             else:
                 sBahnDelayCatCounter[lineName][2] += 1
-    sBahnDelayCatCounter = dict(sorted(sBahnDelayCatCounter.items()))
-    array2D = np.array(list(sBahnDelayCatCounter.values()))
+
+    delayCatArray2D = np.array(list(sBahnDelayCatCounter.values()))
     for catIdx, category in enumerate(categories):
-        widths    = array2D[:,catIdx]
+        widths    = delayCatArray2D[:,catIdx]
         startVals = np.cumsum(list(sBahnDelayCatCounter.values()), axis=1)
         startVals = np.insert(startVals, 0, 0, axis=1)[:,catIdx]
         ax.barh(sBahnDelayCatCounter.keys(), widths, left=startVals, color=categoryColors[catIdx], label=category)
@@ -86,8 +90,9 @@ def render_liveGraph(inputDataJsonPath, svgOutPath):
         ))
 
     #average and max delays
-    averageDelay = np.round(np.mean(array2D, axis=1), 2)
-    maxDelay = np.round(np.max(array2D, axis=1), 2)
+    averageDelay = list(sBahnDelayAvg.values())
+    maxDelay     = list(sBahnDelayMax.values())
+    print(maxDelay)
     yTicks = ax.get_yticks()
     yLabelsFigCoord = fig.transFigure.inverted().transform(ax.transData.transform([(0, y) for y in yTicks]))
     for lineIdx, labelYPosition in enumerate(yLabelsFigCoord):
