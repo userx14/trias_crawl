@@ -32,7 +32,6 @@ sBahnLineColors = {"S1": "#57ae41",
 unknownLineColor = "#929598" #grey for all other unknown lines like S24
 
 def render_liveGraph(inputDataJsonPath, svgOutPath):
-
     sBahnDelays = {}
     with open(inputDataJsonPath) as inputfile:
         jsonData = json.loads(inputfile.read())
@@ -41,28 +40,34 @@ def render_liveGraph(inputDataJsonPath, svgOutPath):
             return
         runningTrainsDict = jsonData["journeys"]
     for journeyRef, journey in runningTrainsDict.items():
-        sBahnDelays.setdefault(journey["lineName"], []).append(journey["delayMinutes"])
+        if journey["isCancelled"]:
+            sBahnDelays.setdefault(journey["lineName"], []).append(None)
+        else:
+            sBahnDelays.setdefault(journey["lineName"], []).append(journey["delayMinutes"])
 
-    categories     = ["< 3 Min", "3 - 5 Min", "> 5 Min", "ausgefallen"]
-    categoryColors = ["green", "orange", "red", "grey"]
+    categories     = ["< 3", "3 - 5", "6 - 15", "> 15 Minuten", "ausgefallen"]
+    categoryColors = ["#1de43c", "#e1e41d", "#e4801d", "#e41d22", "grey"]
     fig, ax = plt.subplots()
 
     sBahnDelayCatCounter = {}
     sBahnDelayAvg = {}
     sBahnDelayMax = {}
     for lineName, delays in dict(sorted(sBahnDelays.items())).items():
-        sBahnDelayCatCounter[lineName] = [0,0,0,0]
-        sBahnDelayAvg[lineName] = np.round(np.mean(delays),2)
-        sBahnDelayMax[lineName] = np.round(np.amax(delays),2)
+        delays = np.array(delays, dtype=float)
+        sBahnDelayCatCounter[lineName] = [0,0,0,0,0]
+        sBahnDelayAvg[lineName] = np.round(np.nanmean(delays), 1)
+        sBahnDelayMax[lineName] = np.round(np.nanmax(delays),  1)
         for delay in delays:
-            if delay is None:
-                sBahnDelayCatCounter[lineName][3] += 1
+            if np.isnan(delay):
+                sBahnDelayCatCounter[lineName][4] += 1
             elif (delay < 3):
                 sBahnDelayCatCounter[lineName][0] += 1
-            elif (3 <= delay) and (delay < 5):
+            elif (delay <= 5):
                 sBahnDelayCatCounter[lineName][1] += 1
-            else:
+            elif (delay <= 15):
                 sBahnDelayCatCounter[lineName][2] += 1
+            else:
+                sBahnDelayCatCounter[lineName][3] += 1
 
     delayCatArray2D = np.array(list(sBahnDelayCatCounter.values()))
     for catIdx, category in enumerate(categories):
@@ -71,11 +76,15 @@ def render_liveGraph(inputDataJsonPath, svgOutPath):
         startVals = np.insert(startVals, 0, 0, axis=1)[:,catIdx]
         ax.barh(sBahnDelayCatCounter.keys(), widths, left=startVals, color=categoryColors[catIdx], label=category)
 
-    ax.set_position([0.1, 0.15, 0.73, 0.75])
-    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.set_position([0.1, 0.20, 0.73, 0.70])
+    xmin, xmax = ax.get_xlim()
+    ax.set_xlim(xmin, xmax + 1)
+    ax.set_xlabel("Zuganzahl")
+    #ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    #ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax.invert_yaxis() #warning, do not move, order matters!
     ax.grid(axis="x")
-    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.07), fancybox=True, shadow=True, ncol=5)
+    ax.legend(loc='upper center', bbox_to_anchor=(0.55, -0.15), fancybox=True, shadow=True, ncol=5)
 
     #sbahn color boxes around y labels
     for label in ax.get_yticklabels():
@@ -92,7 +101,6 @@ def render_liveGraph(inputDataJsonPath, svgOutPath):
     #average and max delays
     averageDelay = list(sBahnDelayAvg.values())
     maxDelay     = list(sBahnDelayMax.values())
-    print(maxDelay)
     yTicks = ax.get_yticks()
     yLabelsFigCoord = fig.transFigure.inverted().transform(ax.transData.transform([(0, y) for y in yTicks]))
     for lineIdx, labelYPosition in enumerate(yLabelsFigCoord):
