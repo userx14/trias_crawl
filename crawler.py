@@ -283,7 +283,7 @@ class LiveJourney:
         return {journeyRef: liveJourneyDict}
 
 base_dir = Path(__file__).parent
-triasApi.requestorKey = open(base_dir/"requestor.key").read()
+triasApi.requestorKey = open(base_dir/"triasApi.key").read()
 logging.basicConfig(
     #filename=base_dir/"error.log",
     level=logging.INFO,
