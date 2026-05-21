@@ -2,55 +2,151 @@ import json
 import requests
 from pathlib import Path
 import xmltodict
-from datetime import datetime
+from datetime import datetime, UTC
 
 base_dir = Path(__file__).parent
 url = open(base_dir/"jsonApi.key").read().replace("\n", "").replace("\r","")
 requestHeader = {'User-Agent': 'Python-urllib/3.10'}
 
 
-def stopFinderRequest(stopName, stopType="stop"):
+def tripStopTimesRequest(linename, stop):
     payload = {
-        "name_sf": stopName,
-        "type_sf": stopType,
-    }
-    response = requests.get(url+"XML_STOPFINDER_REQUEST", params = payload, headers=requestHeader)
-    #jsonPayload["itdRequest"]["itdStopFinderRequest"]["itdOdv"]
-    return xmltodict.parse(response.content)
-
-def servingLinesRequest():
-    requests.get(url+"XML_SERVINGLINES_REQUEST")
-    pass
-
-def dmRequest(stopName):
-    payload = {
-        "nameInfo_dm": stopName,
-        "language": "de",
-        "typeInfo_dm": "stopID",
+        "hideBannerInfo": 1,
+        "line": "sbg:07216: :R:j23",
+        "stopID": "6900590",
+        "itdDateDay":    "23",
+        "itdDateMonth":  "11",
+        "itdDateYear":   "2023",
+        "itdTimeHour":   "07",
+        "itdTimeMinute": "15",
+        "tripCode": "36",
         "useRealtime": 1,
     }
+    response = requests.get(url+"XML_TRIPSTOPTIMES_REQUEST", params = payload, headers=requestHeader)
+    print(response.content)
+    print(response)
+    #return xmltodict.parse(response.content)["itdRequest"]["itdStopFinderRequest"]["itdOdv"]
+
+
+
+def stopFinderRequest(stopName):
+    payload = {
+        "hideBannerInfo": 1,
+        "name_sf": stopName,
+        "type_sf": "any",
+        "useLocalityMainStop": 1,
+        "anyObjFilter_sf": 2 #only stops
+    }
+    response = requests.get(url+"XML_STOPFINDER_REQUEST", params = payload, headers=requestHeader)
+    return xmltodict.parse(response.content)["itdRequest"]["itdStopFinderRequest"]["itdOdv"]
+    #maybe add? ["itdOdvName"]["odvNameElem"]
+
+def servingLinesRequest(stopName):
+    payload = {
+        "hideBannerInfo": 1,
+        "commonMacro": "servinglines",
+        "mode": "odv",
+        "name_sl": stopName,
+        "type_sl": "any",
+        #"lsShowTrainsExplicit": 1,
+        #"lineReqType": 0 #maybe limit this
+    }
+    response = requests.get(url+"XML_SERVINGLINES_REQUEST", params = payload, headers=requestHeader)
+    return xmltodict.parse(response.content)#["itdRequest"]
+
+def dmRequest(stopId):
+    payload = {
+        "hideBannerInfo": 1,
+        "mode": "direct",
+        "name_dm": stopId,
+        "type_dm": "any",
+        "itdDateDay": datetime.now().strftime('%d'),
+        "itdDateMonth": datetime.now().strftime('%m'),
+        "itdDateYear": datetime.now().strftime('%Y'),
+        "itdTimeHour": datetime.now().strftime('%H'),
+        "itdTimeMinute": datetime.now().strftime('%M'),
+        "language": "de",
+        "limit": 10, #how many results maximum
+        "useRealtime": 1,
+        "includedMeans": 1, # search exclusively
+        "inclMOT_1": 1,     # for S-Bahn (Ubahn would be (2, 3, 4), Train (0))
+    }
     response = requests.get(url+"XML_DM_REQUEST", params = payload, headers=requestHeader)
-    return xmltodict.parse(response.content)
+    print(response.content)
+    return xmltodict.parse(response.content)["itdRequest"]["itdDepartureMonitorRequest"]
 
 
 def addInfoRequest():
     payload = {
+        "hideBannerInfo": 1,
         "operatorCode": "DB",
-        "filterDateValid": datetime.today().strftime('%d-%m-%Y'),
-        "filterMOTType": 1
+        "filterDateValid": datetime.now(UTC).strftime('%d-%m-%Y'),
+        "filterMOTType": 1,
+        #"filterProviderCode": "VVS",
+        "filterProviderCode": "RIS",
     }
     response = requests.get(url+"XML_ADDINFO_REQUEST", params = payload, headers=requestHeader)
-    return xmltodict.parse(response.content)
+    return xmltodict.parse(response.content)["itdRequest"]["itdAddInfoRequest"]
 
+
+"""
+jsonPayload = stopFinderRequest("Backnang, Bahnhof")
+print(jsonPayload.keys())
+for element in jsonPayload["itdOdvName"]["odvNameElem"]:
+    print(f"{element}\n")
+"""
+
+"""
+print("not working yet, seems to output nothing, why?")
+jsonPayload = servingLinesRequest("de:08119:7600")
+print(jsonPayload)
+servingLines = jsonPayload["itdTTBRequest"]["itdServingLines"]["itdServingLine"]
+for line in servingLines:
+    print(f"{line}\n")
+
+
+"""
+def itdDatetimeToPython(dictIn):
+    return datetime.strptime(f"{dictIn['itdDate']['@day']}.{dictIn['itdDate']['@month']}.{dictIn['itdDate']['@year']} {dictIn['itdTime']['@hour']}:{dictIn['itdTime']['@minute']}", "%d.%m.%Y %H:%M").replace(tzinfo=UTC).astimezone()
+def ensure_list(x):
+    if isinstance(x, list):
+        return x
+    return [x]
+"""
+jsonPayload = dmRequest("de:08119:7600")
+for servingLine in jsonPayload["itdServingLines"]["itdServingLine"]:
+    print(f"symbol {servingLine['@symbol']}, line {servingLine['motDivaParams']['@line']}")
+    #print(f"srvLine {servingLine}")
+    print("\n")
+print(jsonPayload)
+for departure in jsonPayload["itdDepartureList"]["itdDeparture"]:
+    print(f"{departure}")
+    print(itdDatetimeToPython(departure["itdDateTime"]))
+    if "itdRTDateTime" in departure.keys():
+        print(itdDatetimeToPython(departure["itdRTDateTime"]))
+    print("\n")
+"""
 jsonPayload = addInfoRequest()
-#print(jsonPayload)
-for travelInfo in jsonPayload["itdRequest"]["itdAddInfoRequest"]["itdAdditionalTravelInformations"]["itdAdditionalTravelInformation"]:
-    print(travelInfo.keys())
+print(jsonPayload)
+for travelInfo in ensure_list(jsonPayload["itdAdditionalTravelInformations"]["itdAdditionalTravelInformation"]):
+    print(travelInfo)
+    """
+    travelInfo["creationTime"]["itdDateTime"] = itdDatetimeToPython(travelInfo["creationTime"]["itdDateTime"])
+    travelInfo["expirationDateTime"]["itdDateTime"] = itdDatetimeToPython(travelInfo["expirationDateTime"]["itdDateTime"])
+    for i in range(2):
+        travelInfo["publicationDuration"]["itdDateTime"][i] = itdDatetimeToPython(travelInfo["publicationDuration"]["itdDateTime"][i])
+        travelInfo["validityPeriod"]["itdDateTime"][i] = itdDatetimeToPython(travelInfo["validityPeriod"]["itdDateTime"][i])
+    """
+    """
+    for attributeKey, attributeValue in travelInfo.items():
+        print(f"{attributeKey}:\n{attributeValue}\n\n")
+    """
 
-    print("infolink text")
-    print(travelInfo["infoLink"]["infoLinkText"])
+
+    #print(travelInfo["infoLink"]["infoLinkText"])
     print("\n")
 
+    """
     print("info text")
     print(travelInfo["infoLink"]["infoText"])
     print("\n")
@@ -59,9 +155,6 @@ for travelInfo in jsonPayload["itdRequest"]["itdAddInfoRequest"]["itdAdditionalT
     print(travelInfo["concernedLines"]['line'])
     print("\n")
     #print(travelInfo["concernedStops"])
-print("\n\n")
-#print(jsonPayload["itdRequest"]["itdAddInfoRequest"]["itdUniqueTrainList"])
-#print("\n\n")
-#print(jsonPayload["itdRequest"]["itdAddInfoRequest"]["itdUniqueLineList"])
-#print("\n\n")
-#print(jsonPayload["itdRequest"]["itdAddInfoRequest"]["itdUniqueStopList"])
+    """
+#print(tripStopTimesRequest("ddb:92T03::H:j26", "de:08119:7600"))
+

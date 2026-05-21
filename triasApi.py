@@ -88,7 +88,7 @@ def stopPointRef_from_LocationName(LocationName):
         validStops.append((name, ref))
     return validStops[0]
 
-def getStopEvents(stationName, stationRef, numResults, lookIntoPast=timedelta(hours=2)):
+def getStopEvents(stationName, stationRef, numResults, lookIntoPast=timedelta(hours=2, minutes=0)):
     currentTime         = datetime.now().astimezone()
     departureAtStopTime = triasStrFromDatetime(currentTime - lookIntoPast)
     ptModeFilter        = {"Exclude": "false", "PtMode": "urbanRail", "RailSubmode": "suburbanRailway"}
@@ -104,8 +104,10 @@ def getStopEvents(stationName, stationRef, numResults, lookIntoPast=timedelta(ho
     stopEventRequestPayload["Location"]["DepArrTime"]                  = departureAtStopTime
     stopEventRequestPayload["Params"] = {}
     stopEventRequestPayload["Params"]["PtModeFilter"]                  = ptModeFilter
-    #operatorFilte = {"Exclude": "false", "OperatorRef": "ddb:00"}
-    #stopEventRequestPayload["Params"]["OperatorFilter"]               = operatorFilter
+    #operatorFilter = {"Exclude": "true", "OperatorRef": "ssb"}
+    #stopEventRequestPayload["Params"]["OperatorFilter"]                = operatorFilter
+    ptModeFilter = {"Exclude": "true", "PtMode": ["urbanRail", "rail", "bus"]}
+    stopEventRequestPayload["Params"]["PtModeFilter"]                  = ptModeFilter
     stopEventRequestPayload["Params"]["NumberOfResults"]               = numResults
     stopEventRequestPayload["Params"]["StopEventType"]                 = "both"
     stopEventRequestPayload["Params"]["IncludePreviousCalls"]          = "true"

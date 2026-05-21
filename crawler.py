@@ -63,7 +63,7 @@ class Journey:
     stops:        list[Stop]
 
     def __init__(self, stopEvent):
-        serviceData      = stopEvent["StopEvent"]["Service"]
+        serviceData       = stopEvent["StopEvent"]["Service"]
 
         self.journeyRef   = serviceData["JourneyRef"]
         self.origin       = serviceData["OriginText"]["Text"]
@@ -74,7 +74,7 @@ class Journey:
         #process line name
         self.lineName = serviceData["ServiceSection"]["PublishedLineName"]["Text"]
         if not self.lineName.startswith("S"):
-            raise JourneyProcessError(f"Not an S-Bahn Line: {self.lineName}")
+            raise JourneyProcessError(f"Not an S-Bahn Line: {self.lineName}, op{serviceData}")
 
 
         #process incidentText
@@ -103,6 +103,7 @@ class Journey:
 
         for stopIdx, stop in enumerate(self.stops):
             if (stopIdx != 0) and (stop.arrivalTimetable is None):
+                print(stop)
                 raise JourneyProcessError(f"Missing timetable data, skipped {-stopIndexOffset}")
             if (stopIdx != len(self.stops)-1) and (stop.departureTimetable is None):
                 raise JourneyProcessError(f"Missing timetable data, skipped {-stopIndexOffset}")
@@ -203,12 +204,19 @@ class LiveJourney:
 
     def __init__(self, journey: Journey, evaluationTime: datetime):
         journey = deepcopy(journey)
-        self.journeyRef = journey.journeyRef
-        self.lineName = journey.lineName
-        self.origin = journey.origin
-        self.destination = journey.destination
-        self.incidentText = journey.incidentText
+        self.journeyRef       = journey.journeyRef
+        self.lineName         = journey.lineName
+        self.origin           = journey.origin
+        self.destination      = journey.destination
+        self.incidentText     = journey.incidentText
         self.progressNextStop = None
+        self.isCancelled      = journey.isCancelled
+
+        #no realtime data for cancelled trains
+        if journey.isCancelled:
+            for stopIdx, stop in enumerate(journey.stops):
+                stop.arrivalEstimate   = stop.arrivalTimetable
+                stop.departureEstimate = stop.departureTimetable
         #extrapolate realtime data
         for stopIdx, stop in enumerate(journey.stops):
             if stop.departureTimetable and not stop.departureEstimate:
@@ -221,7 +229,10 @@ class LiveJourney:
                 elif delayAfter is not None:
                     stop.departureEstimate = stop.departureTimetable + delayAfter
                 else:
-                    raise JourneyProcessError("Insufficient realtime data")
+                    if not journey.isCancelled:
+                        raise JourneyProcessError("Insufficient realtime data")
+                    stop.departureEstimate = stop.departureTimetable
+                    stop.arrivalEstimate   = stop.arrivalTimetable
             if stop.arrivalTimetable and not stop.arrivalEstimate:
                 delayBefore, delayAfter = self._getExtrapolatedDelaysAtStop(journey.stops, stopIdx)
                 if delayBefore is not None:
@@ -232,7 +243,10 @@ class LiveJourney:
                 elif delayAfter is not None:
                     stop.arrivalEstimate = stop.arrivalTimetable + delayAfter
                 else:
-                    raise JourneyProcessError("Insufficient realtime data")
+                    if not journey.isCancelled:
+                        raise JourneyProcessError("Insufficient realtime data")
+                    stop.departureEstimate = stop.departureTimetable
+                    stop.arrivalEstimate   = stop.arrivalTimetable
 
         for currentStopIdx in range(len(journey.stops)-1, -1, -1): #exclude first and last stop
             currentStop = journey.stops[currentStopIdx]
@@ -255,7 +269,6 @@ class LiveJourney:
             raise JourneyProcessError("Train has already ended")
 
         self.delayMinutes = round(self.delayMinutes.total_seconds() / 60, 1)
-        self.isCancelled = False
         if currentStop.isNotServiced:
             #skipped stops do not count as cancelation of the train
             if not self._isIntermediateNotServicedStop(journey.stops, currentStopIdx):
@@ -360,7 +373,12 @@ def getDelayData():
         allLiveJourneysDict["info"]["responseTimestamp"] = timestampStr
         allLiveJourneysDict["info"]["calculationTimeMs"] += calcTimeMs
         serviceDelivery = stopEventResponse["Trias"]["ServiceDelivery"]
-        ignoredStopEventCounter = 0
+        earlyCounter = 0
+        lateCounter  = 0
+        earlyNoRtCounter = 0
+        lateNoRtCounter  = 0
+        notRealtimeCounter = 0
+        okCounter = 0
         allStopEventList = serviceDelivery["DeliveryPayload"]["StopEventResponse"]["StopEventResult"]
         for stopEvent in allStopEventList:
             try:
@@ -370,11 +388,25 @@ def getDelayData():
                 journeyRef  = liveJourney.pop("journeyRef")
                 allLiveJourneysDict["journeys"] |= {journeyRef: liveJourney}
                 journey.storeInSqlDb(sqlConnection)
+                okCounter += 1
             except JourneyProcessError as e:
-                ignoredStopEventCounter += 1
+                if str(e) == "Train has not yet started":
+                    earlyCounter += 1
+                elif str(e) == "Train has already ended":
+                    lateCounter += 1
+                else:
+                    minTTimeJourney = min(journey.stops[0].departureTimetable, journey.stops[-1].arrivalTimetable)
+                    maxTTimeJourney = max(journey.stops[0].departureTimetable, journey.stops[-1].arrivalTimetable)
+                    if(currentTime + timedelta(minutes=+10) < minTTimeJourney):
+                        earlyNoRtCounter  += 1
+                    elif(maxTTimeJourney < currentTime + timedelta(minutes=-10)):
+                        lateNoRtCounter  += 1
+                    else:
+                        print(e)
+                        notRealtimeCounter += 1
             except Exception:
                 logging.exception(f"Error while processing stopEvent: {stopEvent}")
-        print(f"using {len(allStopEventList)-ignoredStopEventCounter} / {len(allStopEventList)} journeys in {stationTuple[0]}")
+        print(f"stat ok{okCounter},e{earlyCounter},l{lateCounter},er{earlyNoRtCounter},lr{lateNoRtCounter},rerr{notRealtimeCounter} total{len(allStopEventList)} journeys in {stationTuple[0]}")
     sqlConnection.close()
 
     #write live data into json
