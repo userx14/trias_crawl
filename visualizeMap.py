@@ -446,22 +446,25 @@ def render_delayChangeMap(startDay, endDay, inputSvgPath, outputSvgPath):
             nArrTT   = nextStopDict["arrivalTimetable"]
             lineName, currentStationIdx, nextStationIdx = getStopIndices(journeyDict["lineName"], linesPathDict, currentStopDict["stopPointRef"], nextStopDict["stopPointRef"])
 
+            if abs(currentStationIdx - nextStationIdx)>1:
+                print(f"idx station {currentStationIdx}, {nextStationIdx}, {journeyDict['lineName']}")
+
             #per station delay
             if None not in [cDepES, cDepTT]:
                 if None not in [cArrES, cArrTT]:
                     delayChangeStation = ((cDepES-cDepTT) - (cArrES-cArrTT))/60
                 else:
                     delayChangeStation = (cDepES-cDepTT)/60
-                if currentStationIdx < nextStationIdx:
+                if currentStationIdx <= nextStationIdx:
                     delaySectionDict[lineName][currentStationIdx][2]["trackFw"].append(delayChangeStation)
                 else:
-                    delaySectionDict[lineName][nextStationIdx][2]["trackBw"].append(delayChangeStation)
+                    delaySectionDict[lineName][currentStationIdx-1][2]["trackBw"].append(delayChangeStation)
             if None not in [cDepES, cDepTT, nArrES, nArrTT]:
                 delayChangeTrack = ((nArrES-nArrTT) - (cDepES-cDepTT))/60
-                if currentStationIdx < nextStationIdx:
+                if currentStationIdx <= nextStationIdx:
                     delaySectionDict[lineName][currentStationIdx][2]["trackFw"].append(delayChangeTrack)
                 else:
-                    delaySectionDict[lineName][nextStationIdx][2]["trackBw"].append(delayChangeTrack)
+                    delaySectionDict[lineName][currentStationIdx-1][2]["trackBw"].append(delayChangeTrack)
 
 
     analyze_data(delayAnalysisCallback, startDay, endDay, perJourneyCallback = True)
