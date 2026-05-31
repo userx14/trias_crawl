@@ -382,6 +382,7 @@ def getDelayData():
         allStopEventList = serviceDelivery["DeliveryPayload"]["StopEventResponse"]["StopEventResult"]
         for stopEvent in allStopEventList:
             try:
+                journey     = None
                 journey     = Journey(stopEvent)
                 liveJourney = LiveJourney(journey, evaluationTime=currentTime)
                 liveJourney = asdict(liveJourney)
@@ -394,6 +395,9 @@ def getDelayData():
                     earlyCounter += 1
                 elif str(e) == "Train has already ended":
                     lateCounter += 1
+                elif journey is None:
+                    print(e)
+                    notRealtimeCounter += 1
                 else:
                     minTTimeJourney = min(journey.stops[0].departureTimetable, journey.stops[-1].arrivalTimetable)
                     maxTTimeJourney = max(journey.stops[0].departureTimetable, journey.stops[-1].arrivalTimetable)

@@ -1,42 +1,178 @@
 <!DOCTYPE html>
-<html>
+<html lang="de">
 <head>
-  <meta charset="UTF-8" http-equiv="refresh" content="300">
-  <title>S-Bahn Daten</title>
+  <meta charset="UTF-8">
+  <title>Livedaten S-Bahn Stuttgart</title>
+  <style>
+    body {
+        margin: 0;
+    }
+    .outerflex {
+        display: flex;
+        flex-direction: column;
+        height: 100dvh;
+        padding: 10px;
+        box-sizing: border-box;
+    }
+    .tabs {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+    h2 {
+        margin: 2px;
+    }
+
+    input[type="radio"] {
+      display: none;
+    }
+    .tab-content {
+      flex: 1;
+      display: none;
+      min-height: 0;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      padding: 20px;
+      border-radius: 0 5px 5px 5px;
+    }
+
+    .tab-label {
+      display: inline-block;
+      padding: 6px 10px;
+      margin-right: 3px;
+      background: #e0e0e0;
+      border-radius: 5px 5px 0 0;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    body:has(#tab-live-map:checked)   label[for="tab-live-map"],
+    body:has(#tab-live-graph:checked) label[for="tab-live-graph"],
+    body:has(#tab-stat:checked)       label[for="tab-stat"],
+    body:has(#tab-info:checked)       label[for="tab-info"] {
+        background: #333;
+        color: white;
+    }
+    #tab-live-map:checked ~ .tabs #content-live-map,
+    #tab-live-graph:checked ~ .tabs #content-live-graph {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+    #tab-stat:checked ~ .tabs #content-stat,
+    #tab-info:checked ~ .tabs #content-info {
+        display: block;
+        overflow: auto;
+    }
+
+    .navigation {
+
+      flex: 0 0 auto;
+      display: flex;
+      box-sizing: border-box;
+      flex-wrap: nowrap;
+    }
+    h1 {
+      margin: 0 0 8px 0;
+    }
+    .content {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      border-top: 1px solid #ccc;
+    }
+    .svg-container {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .svg-container object {
+      width: 100%;
+      height: 100%;
+      max-width: 100%;
+      max-height: 100%;
+      display: block;
+      border: none;
+    }
+
+  </style>
 </head>
 <body>
+    <div class="outerflex">
+        <h1>Inoffizielle Livedaten der S-Bahnen in Stuttgart</h1>
+        <input type="radio" name="tabs" id="tab-live-map" checked>
+        <input type="radio" name="tabs" id="tab-live-graph">
+        <input type="radio" name="tabs" id="tab-stat">
+        <input type="radio" name="tabs" id="tab-info">
+        <div class="navigation">
+            <label class="tab-label" for="tab-live-map">Live-Karte</label>
+            <label class="tab-label" for="tab-live-graph">Live-Graph</label>
+            <label class="tab-label" for="tab-stat">Statistik</label>
+            <label class="tab-label" for="tab-info">Info &amp; Kontakt</label>
+        </div>
+        <div class="tabs">
+            <!-- live map -->
+            <div class="tab-content" id="content-live-map">
+                <h2>
+                Live Karte (<a href="./live_map.svg">Vollbild</a>, <a href="./live_map_dark.svg">dunkles Design</a>)
+                </h2>
+                <div class="svg-container">
+                    <object type="image/svg+xml" data="live_map.svg"></object>
+                </div>
+            </div>
 
-<h1>Livedaten</h1>
-<h2>Datensatz zum Abruf als json</h2>
-<a href="./currentRunningTrains.json">currentRunningTrains.json</a>
-<h2>Live Karte</h2>
-<object type="image/svg+xml" data="live_map.svg" width="90%"></object>
-<h2>Live Graph</h2>
-<object type="image/svg+xml" data="live_graph.svg" width="30%"></object>
-<h1>Statistische Auswertung</h1>
-<a href="./stat_map_delay_today.svg">Verspätung - heute</a><br>
-<a href="./stat_map_delay_yesterday.svg">Verspätung - gestern</a><br>
-<a href="./stat_map_delay_lastWeek.svg">Verspätung - letzte Woche</a><br><br>
-<a href="./stat_map_nonServ_today.svg">Haltausfälle - heute</a><br>
-<a href="./stat_map_nonServ_yesterday.svg">Haltausfälle - gestern</a><br>
-<a href="./stat_map_nonServ_lastWeek.svg">Haltausfälle - letzte Woche</a><br><br>
-<a href="./stat_map_delaySection_today.svg">Verspätungsänderung nach Streckenabschnitt - heute</a><br>
-<a href="./stat_map_delaySection_yesterday.svg">Verspätungsänderung nach Streckenabschnitt - gestern</a><br>
-<a href="./stat_map_delaySection_lastWeek.svg">Verspätungsänderung nach Streckenabschnitt - letzte Woche</a><br><br>
-<a href="./stat_map_numTrains_today.svg">Anzahl Züge - heute</a><br>
-<a href="./stat_map_numTrains_yesterday.svg">Anzahl Züge - gestern</a><br>
-<a href="./stat_map_numTrains_lastWeek.svg">Anzahl Züge - letzte Woche</a><br><br>
+            <!-- live graph -->
+            <div class="tab-content" id="content-live-graph">
+                <h2><a href="./live_graph.svg">Live Graph</a></h2>
+                <div class="svg-container">
+                    <object type="image/svg+xml" data="live_graph.svg"></object>
+                </div>
+            </div>
 
-<h1>Weitere Informationan</h1>
-<h2>Datenlizenz und Datennutzung</h2>
-Auf dieser Seite wird ein verarbeiter Datensatz erstellt aus <a href="https://mobidata-bw.de/dataset/trias">Echtzeit-Fahrplandaten des ÖPNV Baden-Württemberg (MOBIDATA BW)</a> bereitgestellt. Die hier bereitgestellten Daten fallen unter die Lizenz <a href="https://www.govdata.de/dl-de/by-2-0">DL-DE->BY-2.0</a>.
-<h2>Quellcode und Datenverfügbarkeit</h2>
-Der gesamte Code zur Abruf und Analyse der Daten ist auf <a href="https://github.com/userx14/trias_crawl">github</a> einsehbar. Für die Echtzeit-Datenabfrage bei Mobidata-BW ist jedoch ein API-Key erforderlich, der nicht weitergegeben werden darf. Aktuelle Live-Daten stehen als json-Datensatz direkt zum Abruf bereit. Historische Daten können aufgrund ihrer Größe nicht direkt angeboten werden. Bei Interesse bitte per Mail anfragen, der aktuelle Datensatz reicht bis Anfang 2026 zurück.
-<h2>Mehr Daten zur Stuttgarter S-Bahn</h2>
-Auf dem Portal von <a href="https://s-bahn-chaos.de/">S-Bahn Chaos Stuttgart</a> finden sich interessante Beiträge und Informationen rund im die S-Bahn Stuttgart. Dort wird auch ein ähnlicher <a href="https://s-bahn-chaos.de/monitor/">Livemonitor</a> für die S-Bahn Stuttgart angeboten.
-<h2>Kontaktinfo</h2>
-Name: Benjamin Renz <br>
-Mail: appswert (ät) gmail.com <br>
-Ich freue mich über Anregungen, Hinweise auf Fehler oder Visualisierungsideen.
+            <!-- statistics -->
+            <div class="tab-content" id="content-stat">
+                <h1>Statistische Auswertung</h1>
+                <h2>Verspätung</h2>
+                <a href="./stat_map_delay_today.svg">heute</a><br>
+                <a href="./stat_map_delay_yesterday.svg">gestern</a><br>
+                <a href="./stat_map_delay_lastWeek.svg">letzte Woche</a><br><br>
+
+                <h2>Haltausfälle</h2>
+                <a href="./stat_map_nonServ_today.svg">heute</a><br>
+                <a href="./stat_map_nonServ_yesterday.svg">gestern</a><br>
+                <a href="./stat_map_nonServ_lastWeek.svg">letzte Woche</a><br><br>
+
+                <h2>Verspätungsänderung nach Streckenabschnitt</h2>
+                <a href="./stat_map_delaySection_today.svg">heute</a><br>
+                <a href="./stat_map_delaySection_yesterday.svg">gestern</a><br>
+                <a href="./stat_map_delaySection_lastWeek.svg">letzte Woche</a><br><br>
+
+                <h2>Anzahl Züge</h2>
+                <a href="./stat_map_numTrains_today.svg">heute</a><br>
+                <a href="./stat_map_numTrains_yesterday.svg">gestern</a><br>
+                <a href="./stat_map_numTrains_lastWeek.svg">letzte Woche</a><br>
+                </div>
+
+            <!-- info and contact -->
+            <div class="tab-content" id="content-info">
+                <h2>Datenlizenz und Datennutzung</h2>
+                Auf dieser Seite wird ein verarbeiter Datensatz erstellt aus <a href="https://mobidata-bw.de/dataset/trias">Echtzeit-Fahrplandaten des ÖPNV Baden-Württemberg (MOBIDATA BW)</a> bereitgestellt. Die hier bereitgestellten Daten fallen unter die Lizenz <a href="https://www.govdata.de/dl-de/by-2-0">DL-DE->BY-2.0</a>.
+
+                <h2>Quellcode und Datenverfügbarkeit</h2>
+                Der gesamte Code zur Abruf und Analyse der Daten ist auf <a href="https://github.com/userx14/trias_crawl">github</a> einsehbar. Für die Echtzeit-Datenabfrage bei Mobidata-BW ist jedoch ein API-Key erforderlich, der nicht weitergegeben werden darf. Aktuelle Live-Daten stehen als json-Datensatz direkt zum Abruf bereit. Historische Daten können aufgrund ihrer Größe nicht direkt angeboten werden. Bei Interesse bitte per Mail anfragen, der aktuelle Datensatz reicht bis Anfang 2026 zurück.
+
+                <h2>Mehr Daten zur Stuttgarter S-Bahn</h2>
+                Auf dem Portal von <a href="https://s-bahn-chaos.de/">S-Bahn Chaos Stuttgart</a> finden sich interessante Beiträge und Informationen rund im die S-Bahn Stuttgart. Dort wird auch ein ähnlicher <a href="https://s-bahn-chaos.de/monitor/">Livemonitor</a> für die S-Bahn Stuttgart angeboten.
+
+                <h2>Kontaktinfo</h2>
+                Name: Benjamin Renz <br>
+                Mail: appswert (ät) gmail.com <br>
+                Ich freue mich über Anregungen, Hinweise auf Fehler oder Visualisierungsideen.
+            </div>
+        </div>
+    </div>
 </body>
 </html>
