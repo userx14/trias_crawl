@@ -113,6 +113,7 @@ class Journey:
         self.isUnplanned = (serviceData.get("Unplanned") == "true")
         self.isDeviated  = (serviceData.get("Deviation") == "true")
 
+
     def storeInSqlDb(self, sqlConnection):
         sqlCursor = sqlConnection.cursor()
 
@@ -275,14 +276,19 @@ class LiveJourney:
                 self.isCancelled = True
 
         #find next non skipped stop
-        for nextStopIdx in range(currentStopIdx + 1, len(journey.stops)):
-            nextStop = journey.stops[nextStopIdx]
-            if not nextStop.isNotServiced:
-                self.nextStopName = nextStop.stopPointName
-                self.nextStopRef  = nextStop.stopPointRef
-                break
+        if self.isCancelled:
+            nextStopIdx = currentStopIdx + 1
+            nextStop = journey.stops[currentStopIdx+1]
         else:
-            raise JourneyProcessError("Train has no remaining serviced stops")
+            for nextStopIdx in range(currentStopIdx + 1, len(journey.stops)):
+                nextStop = journey.stops[nextStopIdx]
+                if not nextStop.isNotServiced:
+                    break
+            else:
+                raise JourneyProcessError("Train has no remaining serviced stops")
+
+        self.nextStopName = nextStop.stopPointName
+        self.nextStopRef  = nextStop.stopPointRef
 
         #calculate progress
         if self.progressNextStop is None:
