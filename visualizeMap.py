@@ -3,9 +3,10 @@ from svgpathtools        import Path as SvgPath
 from svgpathtools.parser import parse_transform
 from svgpathtools.path   import translate, rotate, scale
 from datetime            import datetime, timezone, timedelta
-from lineStations        import linesStations
 from pathlib             import Path
 import math, json, xmltodict, logging, copy, sqlite3, re
+
+from trias_crawl.lineStations import linesStations
 
 logging.basicConfig(
     #filename=base_dir/"error.log",

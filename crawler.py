@@ -7,8 +7,9 @@ import json
 import subprocess
 import traceback
 import xmltodict
-import triasApi
 import sqlite3
+from trias_crawl import TRIAS_API_KEY
+import trias_crawl.triasApi as triasApi
 
 @dataclass
 class Stop:
@@ -301,8 +302,7 @@ class LiveJourney:
         journeyRef = liveJourneyDict.pop("journeyRef")
         return {journeyRef: liveJourneyDict}
 
-base_dir = Path(__file__).parent
-triasApi.requestorKey = open(base_dir/"triasApi.key").read()
+triasApi.requestorKey = TRIAS_API_KEY
 logging.basicConfig(
     #filename=base_dir/"error.log",
     level=logging.INFO,

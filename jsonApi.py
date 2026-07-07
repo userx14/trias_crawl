@@ -8,7 +8,7 @@ base_dir = Path(__file__).parent
 url = open(base_dir/"jsonApi.key").read().replace("\n", "").replace("\r","")
 requestHeader = {'User-Agent': 'Python-urllib/3.10'}
 
-
+"""
 def tripStopTimesRequest(linename, stop):
     payload = {
         "hideBannerInfo": 1,
@@ -74,16 +74,25 @@ def dmRequest(stopId):
     response = requests.get(url+"XML_DM_REQUEST", params = payload, headers=requestHeader)
     print(response.content)
     return xmltodict.parse(response.content)["itdRequest"]["itdDepartureMonitorRequest"]
-
+"""
 
 def addInfoRequest():
+    """
     payload = {
         "hideBannerInfo": 1,
         "operatorCode": "DB",
+        #"filterDateValid": datetime.now(UTC).strftime('%d-%m-%Y'),
+        "filterMOTType": 1,
+        "filterProviderCode": "VVS",
+        #"filterProviderCode": "RIS", #only disruptions
+    }"""
+    payload = {
+        "hideBannerInfo": 1,
+        #"operatorCode": "DB",
         "filterDateValid": datetime.now(UTC).strftime('%d-%m-%Y'),
         "filterMOTType": 1,
         #"filterProviderCode": "VVS",
-        "filterProviderCode": "RIS",
+        #"filterProviderCode": "RIS", #only disruptions
     }
     response = requests.get(url+"XML_ADDINFO_REQUEST", params = payload, headers=requestHeader)
     return xmltodict.parse(response.content)["itdRequest"]["itdAddInfoRequest"]
@@ -127,9 +136,49 @@ for departure in jsonPayload["itdDepartureList"]["itdDeparture"]:
     print("\n")
 """
 jsonPayload = addInfoRequest()
-print(jsonPayload)
+allTravelInfoDict = {
+        "info": {
+            "calculationTimeMs":          0,
+            "responseTimestamp":          None,
+            "attachedDataFormatRevision": "2026.06.11",
+            "license":                    "DL-DE/BY-2-0",
+            "rawDataSourceUrl":           "https://mobidata-bw.de/dataset/",
+        },
+        "disruptions": [],
+    }
+#print(jsonPayload)
+if jsonPayload["itdAdditionalTravelInformations"] is None:
+    print("no data")
+    exit(0)
 for travelInfo in ensure_list(jsonPayload["itdAdditionalTravelInformations"]["itdAdditionalTravelInformation"]):
-    print(travelInfo)
+    try:
+        resultDict = {}
+        concernedLines = []
+        for line in ensure_list(travelInfo["concernedLines"]["line"]):
+            concernedLines.append(line["@number"]+line["@supplement"])
+        resultDict["concernedLines"]                     = sorted(list(set(concernedLines)))
+        resultDict["shortText"]                          = travelInfo["infoLink"]["infoLinkText"]
+        resultDict["fullText"]                           = travelInfo["infoLink"]["infoText"]["content"]
+        concernedStops = []
+        if travelInfo["concernedStops"]:
+            for stop in ensure_list(travelInfo["concernedStops"]["stop"]):
+                print(stop)
+                #concernedStops.append({stop["@globalID"]: stop["@name"]})
+            resultDict["concernedStops"]                     = concernedStops
+        else:
+            resultDict["concernedStops"]                     = None
+        resultDict["priority"]                           = travelInfo["@priority"]
+        resultDict["isValid"]                            = (travelInfo["@valid"]=="1")
+        resultDict["creationTime"]                       = itdDatetimeToPython(travelInfo["creationTime"       ]["itdDateTime"]).timestamp()
+        travelInfo["expirationDateTime"]["itdDateTime"]  = itdDatetimeToPython(travelInfo["expirationDateTime" ]["itdDateTime"])
+        resultDict["validityPeriodStart"]                = itdDatetimeToPython(travelInfo["validityPeriod"     ]["itdDateTime"][0]).timestamp()
+        resultDict["validityPeriodEnd"]                  = itdDatetimeToPython(travelInfo["validityPeriod"     ]["itdDateTime"][1]).timestamp()
+        resultDict["publicationDurationStart"]           = itdDatetimeToPython(travelInfo["publicationDuration"]["itdDateTime"][0]).timestamp()
+        resultDict["publicationDurationEnd"]             = itdDatetimeToPython(travelInfo["publicationDuration"]["itdDateTime"][1]).timestamp()
+        resultDict["providerCode"]                       = travelInfo["@providerCode"]
+        allTravelInfoDict["disruptions"].append(resultDict)
+    except Exception as e:
+        print(f"Failed to parse travel info: {e}")
     """
     travelInfo["creationTime"]["itdDateTime"] = itdDatetimeToPython(travelInfo["creationTime"]["itdDateTime"])
     travelInfo["expirationDateTime"]["itdDateTime"] = itdDatetimeToPython(travelInfo["expirationDateTime"]["itdDateTime"])
@@ -144,7 +193,6 @@ for travelInfo in ensure_list(jsonPayload["itdAdditionalTravelInformations"]["it
 
 
     #print(travelInfo["infoLink"]["infoLinkText"])
-    print("\n")
 
     """
     print("info text")
@@ -157,4 +205,12 @@ for travelInfo in ensure_list(jsonPayload["itdAdditionalTravelInformations"]["it
     #print(travelInfo["concernedStops"])
     """
 #print(tripStopTimesRequest("ddb:92T03::H:j26", "de:08119:7600"))
+#write live data into json
+allTravelInfoDict["disruptions"].sort(
+    key=lambda disruption: disruption.get("isValid", False),
+    reverse=True
+)
+with open(base_dir/"www/travelInformation.json", "w") as outputfile:
+    outputfile.write(json.dumps(allTravelInfoDict, indent=4))
+
 
