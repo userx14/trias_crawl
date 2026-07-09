@@ -1,12 +1,13 @@
 import math, json, logging, xmltodict, copy, sqlite3, re
 from datetime            import datetime, timezone, timedelta
 from pathlib             import Path
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, asdict
 from io import BytesIO
 import cairosvg
 import numpy as np
 from PIL import Image
 from moviepy import VideoClip
+import copy
 
 from trias_crawl.lineStations import linesStations
 from trias_crawl.crawler import Journey, Stop, LiveJourney, JourneyProcessError
@@ -106,31 +107,33 @@ def get_stateAtTime(analysisDateTime):
         except JourneyProcessError as e:
             pass
         except Exception as e:
-            logging.error(f"could not initialize live journey {e} {journeyDict["journeyRef"]}")
+            logging.error(f"could not initialize live journey {e} {journeyObj}")
     return allLiveJourneys
 
 from trias_crawl.visualizeMap import *
 cacheSvg = parseSvg("./trias_crawl/svg_source/live_map_source_light.svg")
 def getLivemapSvg(runningTrainsDict, analysisDateTime):
-    svgDict, linesPathDict, trainIconDict, _ = cacheSvg
+    svgDict, linesPathDict, trainIconDict, _ = copy.deepcopy(cacheSvg)
     title = "Livekarte, aktualisiert "
     title += str(analysisDateTime.strftime('%d.%m.%Y %H:%M:%S'))
     changeMapTitle(svgDict, title)
-    placeTrains(svgDict, linesPathDict, trainIconDict, runningTrainsDict.values())
+    placeTrains(svgDict, linesPathDict, trainIconDict, runningTrainsDict)
     return xmltodict.unparse(svgDict, pretty=True)
 
-def getMP4(startTime, endTime, frameRate = 30):
+mp4fps = 30
+def getMP4(startTime, endTime, minutesPerSecond = 5):
     def get_frame(t):
-        analysisDateTime = timedelta(minutes = t*frameRate) + startTime
+        analysisDateTime = timedelta(minutes = t*minutesPerSecond) + startTime
         print(analysisDateTime)
         state = get_stateAtTime(analysisDateTime)
         if state is None:
             state = {}
+        else:
+            state = [asdict(journey) for journey in state]
         svg = getLivemapSvg(state, analysisDateTime)
         png = cairosvg.svg2png(bytestring=svg.encode())
         return np.array(Image.open(BytesIO(png)).convert("RGB"))
-    clip = VideoClip(get_frame, duration=(endTime-startTime).total_seconds()/60/frameRate)
-    clip.write_videofile(f"{startTime}_{endTime}.mp4", fps=frameRate)
+    clip = VideoClip(get_frame, duration=((endTime-startTime).total_seconds()/60)/minutesPerSecond)
+    clip.write_videofile(f"{startTime}_{endTime}.mp4", fps=mp4fps)
 
-getMP4(datetime.now(timezone.utc
-)-timedelta(hours=24), datetime.now(timezone.utc)-timedelta(hours=23))
+getMP4(datetime.now(timezone.utc)-timedelta(hours=18), datetime.now(timezone.utc)-timedelta(hours=1))
