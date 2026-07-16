@@ -30,7 +30,7 @@ def sendRequest(requestAsDict):
     if validateXSD:
         xmlschema.validate(requestAsXml, './trias_xsd/Trias.xsd')
 
-    response = requests.post(url, data=requestAsXml, headers=requestHeader)
+    response = requests.post(url, data=requestAsXml, headers=requestHeader, timeout=(5, 30))
 
     #when a single item of these is found, make it a list anyway
     alwaysList = ["Attribute", "LocationResult", "Mode", "PreviousCall", "ThisCall", "OnwardCall"]
