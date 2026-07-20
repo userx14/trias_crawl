@@ -385,7 +385,7 @@ def getDelayData():
         lateNoRtCounter  = 0
         notRealtimeCounter = 0
         okCounter = 0
-        allStopEventList = serviceDelivery["DeliveryPayload"]["StopEventResponse"]["StopEventResult"]
+        allStopEventList = serviceDelivery["DeliveryPayload"]["StopEventResponse"].get("StopEventResult", [])
         for stopEvent in allStopEventList:
             try:
                 journey     = None
