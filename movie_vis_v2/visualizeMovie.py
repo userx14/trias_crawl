@@ -7,6 +7,8 @@ from pathlib             import Path
 import math, json, xmltodict, logging, copy, sqlite3, re
 from dataclasses import dataclass, fields
 import matplotlib.dates as mdates
+import visualizeMap
+from moviepy import VideoClip
 
 logging.basicConfig(
     #filename=base_dir/"error.log",
@@ -118,6 +120,9 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
     startOpdayUnixTimestamp = startUnixTimestamp - 36*60*60 #one and a half day offset for operating day
     endOpdayUnixTimestamp   = endUnixTimestamp   + 36*60*60
 
+    allTimestampsArray = np.arange(np.datetime64(startUnixTimestamp, "s"), np.datetime64(endUnixTimestamp, "s"), np.timedelta64(60, "s"))
+
+
     connection         = sqlite3.connect(db_data_source)
     cursor             = connection.cursor()
     cursor.execute(f"SELECT * FROM journeys WHERE ?<=operatingDay AND operatingDay<=?;", (startOpdayUnixTimestamp,endOpdayUnixTimestamp))
@@ -163,7 +168,11 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
         recordArray2d[name][:,:]                   = default
         recordArray2d[name][journeyPos, stopIndex] = stops[:, idx]
 
-    for analysisTime in np.arange(np.datetime64(startUnixTimestamp, "s"), np.datetime64(endUnixTimestamp, "s"), np.timedelta64(60, "s")):
+    #initialize svg
+    svgDict, linesPathDict, trainIconDict, _ = visualizeMap.parseSvg(inputSvgPath)
+
+    def get_frame(t):
+        analysisTime = 60*t*renderMinutesPerMovieSecond + startUnixTimestamp
         events = np.stack((recordArray2d["arrivalEstimate"],recordArray2d["departureEstimate"]), axis=2).reshape(recordArray2d.shape[0], -1)
         eventsDelta = events - analysisTime
 
@@ -177,7 +186,6 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
 
         if(np.sum(journeyInProgress)<1):
             continue
-
 
         recordArrayInProgress = recordArray2d[journeyInProgress]
         filteredEstimateEvents = events[journeyInProgress]
@@ -210,10 +218,29 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
         #np.argmax(inFuture, axis=1) #first index that is in the future
 
 
+        title = "Livekarte, aktualisiert "
+        title += str(datetime.now().strftime('%d.%m.%Y %H:%M:%S'))
+        svgDictCopy = deepcopy(svgDict)
+        visualizeMap.changeMapTitle(svgDictCopy, title)
+        with open(inputDataJsonPath) as inputfile:
+            jsonData = json.loads(inputfile.read())
+            if jsonData["info"]["attachedDataFormatRevision"] != dataFormatRevision:
+                logging.error("incompatible json data file version")
+                return
+            runningTrainsDict = jsonData["journeys"]
+        visualizeMap.placeTrains(svgDictCopy, linesPathDict, trainIconDict, runningTrainsDict.values())
+        png = cairosvg.svg2png(bytestring=xmltodict.unparse(svgDictCopy).encode())
+        return np.array(Image.open(BytesIO(png)).convert("RGB"))
+    renderDurationSeconds = allTimestampsArray[-1]-allTimestampsArray[0]
+    renderMinutesPerMovieSecond = 60
+    clip = VideoClip(get_frame, duration=(renderDurationSeconds/60)/renderMinutesPerMovieSecond)
+    clip.write_videofile(f"{startUnixTimestamp}_{endUnixTimestamp}.mp4", fps=mp4fps)
+
+
 
 
 
 
 #timestamp = int(datetime.now(timezone.utc).timestamp())
-timestamp = 1785888000
+timestamp = 1773100800
 render_mp4_for_date(timestamp-48*60*60, timestamp, ".test.svg")
