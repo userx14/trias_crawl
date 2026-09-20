@@ -5,7 +5,6 @@ from datetime            import datetime, timezone, timedelta
 from lineStations        import linesStations
 from pathlib             import Path
 import math, json, xmltodict, logging, copy, sqlite3, re
-from crawler import Journey, Stop, LiveJourney, JourneyProcessError
 from dataclasses import dataclass, fields
 import matplotlib.dates as mdates
 
@@ -114,14 +113,6 @@ def render_liveGraph(inputDataJsonPath, svgOutPath):
     fig.savefig(svgOutPath)
 
 
-@dataclass
-class JourneyDefaultInit(Journey):
-    pass
-
-@dataclass
-class StopDefaultInit(Stop):
-    pass
-
 def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
     #getting data around this
     startOpdayUnixTimestamp = startUnixTimestamp - 36*60*60 #one and a half day offset for operating day
@@ -138,7 +129,7 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
     stops = np.array(stops)
 
     stopIndex                       = stops[:, 2].astype(int) - 1
-    maxStop                         = np.amax(stopIndex)
+    maxNumStops                     = np.amax(stopIndex) + 1
 
     fields = [
         ("stopPointName",      "U100",          3, ""),
@@ -151,127 +142,78 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
     ]
     dtype = [(name, nptype) for name, nptype, _, _ in fields]
 
-    uniqueJourneys, journeyPos = np.unique(stops[:,1], return_inverse=True)
+    #unique filter for operatingDay and journeyReference
+    journeyKeys = np.empty(
+        len(stops),
+        dtype=[
+            ("operatingDay", "int64"),
+            ("journeyRef", "U100"),
+        ]
+    )
+    journeyKeys["operatingDay"] = stops[:, 0]
+    journeyKeys["journeyRef"] = stops[:, 1]
+    uniqueJourneys, journeyPos = np.unique(
+        journeyKeys,
+        return_inverse=True
+    )
+
     #initialize array
-    recordArray2d              = np.empty([len(uniqueJourneys), maxStop+1], dtype=dtype)
+    recordArray2d              = np.empty([len(uniqueJourneys), maxNumStops], dtype=dtype)
     for name, _, idx, default in fields:
-        recordArray2d[:,:][name]                   = default
-        recordArray2d[journeyPos, stopIndex][name] = stops[:, idx]
-    print(recordArray2d)
+        recordArray2d[name][:,:]                   = default
+        recordArray2d[name][journeyPos, stopIndex] = stops[:, idx]
 
-    for analysisTimestamp in np.arange(startUnixTimestamp, endUnixTimestamp, 60):
-        recordArray2d[:,:]["departureEstimate"] - analysisTimestamp
-        recordArray2d[:,:]["arrivalEstimate"]   - analysisTimestamp
+    for analysisTime in np.arange(np.datetime64(startUnixTimestamp, "s"), np.datetime64(endUnixTimestamp, "s"), np.timedelta64(60, "s")):
+        events = np.stack((recordArray2d["arrivalEstimate"],recordArray2d["departureEstimate"]), axis=2).reshape(recordArray2d.shape[0], -1)
+        eventsDelta = events - analysisTime
+
+        inFuture = ~np.isnat(eventsDelta) & (eventsDelta >= np.timedelta64(0, "s"))
+        inPast   = ~np.isnat(eventsDelta) & (eventsDelta < np.timedelta64(0, "s"))
+        journeyInProgress = np.any(inFuture, axis=1) & np.any(inPast, axis=1)
+
+        nextEventIdx = np.argmax(inFuture[journeyInProgress], axis=1) #first index that is in the future
+        prevEventIdx = maxNumStops*2 - 1 - np.argmax(inPast[journeyInProgress,::-1], axis=1)
+        atStation    = (nextEventIdx % 2).astype("bool")              #true if at station, false if on track between
+
+        if(np.sum(journeyInProgress)<1):
+            continue
 
 
-    """
-    #get all stops
+        recordArrayInProgress = recordArray2d[journeyInProgress]
+        filteredEstimateEvents = events[journeyInProgress]
+        filteredTimetableEvents = np.stack((recordArrayInProgress["arrivalTimetable"],recordArrayInProgress["departureTimetable"]), axis=2).reshape(recordArrayInProgress.shape[0], -1)
 
-    def get_stateAtTime(analysisDateTime):
+        rows = np.arange(len(prevEventIdx))
+        timeBetweenStations = filteredEstimateEvents[rows,nextEventIdx] - filteredEstimateEvents[rows,prevEventIdx]
+        timeAfterStation    = analysisTime - filteredEstimateEvents[rows,prevEventIdx]
+        positionInterpol = (timeAfterStation/timeBetweenStations)*(1-atStation) + (prevEventIdx//2)
+        print(f"recordArrayInProgress {recordArrayInProgress}")
+        print(f"interpol {positionInterpol}")
+
+        #calculate delay
+        delays = (filteredEstimateEvents[rows,prevEventIdx]-filteredTimetableEvents[rows,prevEventIdx]).astype("int")/60
+        print(f"delays {delays}")
+        print("\n")
+
+        journeyRecords = [
+            next(
+                journey
+                for journey in journeys
+                if journey[0] == key["operatingDay"]
+                and journey[1] == key["journeyRef"]
+            )
+            for key in uniqueJourneys[journeyInProgress]
+        ]
+        print(journeyRecords)
+        #delay = recordArray2d["arrivalTimetable"][journeyInProgress][rows,prevEventIdx//2]
+        continue
+        #np.argmax(inFuture, axis=1) #first index that is in the future
 
 
 
-        if not journeys:
-            logging.info(f"not data in db for this timespan {operatingDayBefore} , {operatingDayAfter}")
-            connection.close()
-            return
 
-        allLiveJourneys    = []
 
-        keysJourney = list(map(lambda x: x[0], cursor.description))
-        for journeyData in journeys:
-            journeyDict = dict()
-            for keyIdx, key in enumerate(keysJourney):
-                journeyDict[key] = journeyData[keyIdx]
-            journeyRef      = journeyDict["journeyRef"]
-            operatingDay    = journeyDict["operatingDay"]
 
-            #get all stops
-            cursor.execute(f"SELECT * FROM stops WHERE operatingDay=? AND journeyRef=? ORDER BY stopIndex ASC;", (operatingDay,journeyRef,))
-            stops = cursor.fetchall()
-            stopsList = []
-            keysStop = list(map(lambda x: x[0], cursor.description))
-            for stopData in stops:
-                stopDict = dict()
-                for keyIdx, key in enumerate(keysStop):
-                    stopDict[key] = stopData[keyIdx]
-                stopDict.pop("journeyRef")
-                stopDict.pop("operatingDay")
-                departureTimetable = stopDict.get("departureTimetable")
-                departureEstimate  = stopDict.get("departureEstimate")
-                arrivalTimetable   = stopDict.get("arrivalTimetable")
-                arrivalEstimate    = stopDict.get("arrivalEstimate")
-                stopDict["departureTimetable"] = datetime.fromtimestamp(departureTimetable, tz=timezone.utc) if departureTimetable else None
-                stopDict["departureEstimate"]  = datetime.fromtimestamp(departureEstimate, tz=timezone.utc) if departureEstimate else None
-                stopDict["arrivalTimetable"]   = datetime.fromtimestamp(arrivalTimetable, tz=timezone.utc) if arrivalTimetable else None
-                stopDict["arrivalEstimate"]    = datetime.fromtimestamp(arrivalEstimate, tz=timezone.utc) if arrivalEstimate else None
-                stopsList.append(StopDefaultInit(**stopDict))
-            journeyDict["stops"] = stopsList
-            journeyDict["operatingDay"] = datetime.fromtimestamp(journeyDict["operatingDay"], tz=timezone.utc)
-            journeyObj = JourneyDefaultInit(**journeyDict)
-            try:
-                liveJourn = LiveJourney(journeyObj, analysisDateTime)
-                allLiveJourneys.append(liveJourn)
-            except JourneyProcessError as e:
-                pass
-            except Exception as e:
-                logging.error(f"could not initialize live journey {e} {journeyDict["journeyRef"]}")
-        connection.close()
-        return allLiveJourneys
-    timesteps = np.arange(startDay, endDay, np.timedelta64(30, 'm'))
-    averageDelayAllLines = []
-    maxDelayAllLines     = []
-    averageDelayPerLine  = dict()
-    for timeIdx, time in enumerate(timesteps):
-        print(time)
-        time  = time.item().replace(tzinfo=timezone.utc)
-        state = get_stateAtTime(time)
-        currentTimestepDelayDict = {}
-        for livejourn in state:
-            currentTimestepDelayDict.setdefault(livejourn.lineName, []).append(livejourn.delayMinutes)
-        allDelaysCombined = list(currentTimestepDelayDict.values())
-        allDelaysCombined = [delay for lineDelay in allDelaysCombined for delay in lineDelay]
-        averageDelayAllLines.append(np.mean(allDelaysCombined))
-        maxDelayAllLines.append(np.max(allDelaysCombined) if allDelaysCombined else None)
-
-        for newLineName in [lineName for lineName in currentTimestepDelayDict.keys() if lineName not in averageDelayPerLine.keys()]:
-            averageDelayPerLine[newLineName] = [] + [None] * timeIdx
-        for lineName in averageDelayPerLine.keys():
-            if lineName not in currentTimestepDelayDict.keys():
-                averageDelayPerLine[lineName].append(None)
-            else:
-                averageDelayPerLine[lineName].append(np.mean(currentTimestepDelayDict[lineName]))
-
-    averageDelayPerLine = dict(sorted(averageDelayPerLine.items()))
-    for lineName, delayTimestepList in averageDelayPerLine.items():
-        print(f"{lineName} {len(delayTimestepList)}")
-
-    fig, axs = plt.subplots(len(averageDelayPerLine)+1, squeeze=False)
-    axs = axs.flatten()
-    axs[0].plot(timesteps, averageDelayAllLines, label="Alle Linien", color="black")
-    axs[0].legend(loc="upper right")
-    for axsIdx, (lineName, delaysOnLine) in enumerate(averageDelayPerLine.items()):
-        color = sBahnLineColors.get(lineName, unknownLineColor)
-        axs[axsIdx+1].plot(timesteps, delaysOnLine, label=f"{lineName}", color=color, linewidth=3)
-        axs[axsIdx+1].legend(loc="upper right")
-    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%d.%m.%y\n%H:%M'))
-    plt.gcf().autofmt_xdate()  # dreht Labels automatisch
-    fig.supylabel("Durchschnittsverspätung in Minuten")
-    fig.tight_layout(pad=1.0)
-    plt.subplots_adjust(hspace=0.4)
-    fig.savefig(outputSvgPath)
-
-    plt.figure()
-    plt.plot(timesteps, maxDelayAllLines, label="Maximalverspätung")
-    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%d.%m.%y\n%H:%M'))
-    plt.gcf().autofmt_xdate()  # dreht Labels automatisch
-    plt.legend()
-    fig.savefig()
-"""
-
-#now       = datetime.now().astimezone()
-#yesterday = now+timedelta(days=-1)
-#render_statGraph(yesterday, now, "output.svg")
-
-timestamp = int(datetime.now(timezone.utc).timestamp())
+#timestamp = int(datetime.now(timezone.utc).timestamp())
+timestamp = 1785888000
 render_mp4_for_date(timestamp-48*60*60, timestamp, ".test.svg")
