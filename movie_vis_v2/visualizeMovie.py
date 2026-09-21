@@ -4,6 +4,7 @@ import numpy as np
 from datetime            import datetime, timezone, timedelta
 from lineStations        import linesStations
 from pathlib             import Path
+from copy import deepcopy
 import math, json, xmltodict, logging, copy, sqlite3, re
 from dataclasses import dataclass, fields
 import matplotlib.dates as mdates
@@ -21,17 +22,20 @@ yearInt                = datetime.now().year
 db_data_source         = base_dir/f'loggedJourney_{yearInt}.db'
 dataFormatRevision     = "2026.03.11"
 
+inputSvgPath = "live_map_source_light.svg"
 
-sBahnLineColors = {"S1": "#57ae41",
-                  "S2": "#ec1e2a",
-                  "S3": "#f27032",
-                  "S4": "#0066b3",
-                  "S5": "#00acdd",
-                  "S6": "#898d0b",
-                  "S60": "#844d00",
-                  "S62": "#c37930"}
+sBahnLineColors = {
+    "S1": "#57ae41",
+    "S2": "#ec1e2a",
+    "S3": "#f27032",
+    "S4": "#0066b3",
+    "S5": "#00acdd",
+    "S6": "#898d0b",
+    "S60": "#844d00",
+    "S62": "#c37930",
+}
 unknownLineColor = "#929598" #grey for all other unknown lines like S24
-
+"""
 def render_liveGraph(inputDataJsonPath, svgOutPath):
     sBahnDelays = {}
     with open(inputDataJsonPath) as inputfile:
@@ -113,7 +117,7 @@ def render_liveGraph(inputDataJsonPath, svgOutPath):
     ax.set_title(f"Verspätung S-Bahn Stuttgart um {pretty}", fontsize=12, fontweight="bold")
 
     fig.savefig(svgOutPath)
-
+"""
 
 def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
     #getting data around this
@@ -127,14 +131,15 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
     cursor             = connection.cursor()
     cursor.execute(f"SELECT * FROM journeys WHERE ?<=operatingDay AND operatingDay<=?;", (startOpdayUnixTimestamp,endOpdayUnixTimestamp))
     journeys           = cursor.fetchall()
-    operatingDays = set([journey[0] for journey in journeys])
+    journeys_fields    = [description[0] for description in cursor.description]
+    operatingDays      = set([journey[0] for journey in journeys])
 
     cursor.execute(f"SELECT * FROM stops WHERE ?<=operatingDay AND operatingDay<=? ORDER BY journeyRef ASC, stopIndex ASC;", (min(operatingDays),max(operatingDays),))
     stops = cursor.fetchall()
     stops = np.array(stops)
 
-    stopIndex                       = stops[:, 2].astype(int) - 1
-    maxNumStops                     = np.amax(stopIndex) + 1
+    stopIndex   = stops[:, 2].astype(int) - 1
+    maxNumStops = np.amax(stopIndex) + 1
 
     fields = [
         ("stopPointName",      "U100",          3, ""),
@@ -148,16 +153,15 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
     dtype = [(name, nptype) for name, nptype, _, _ in fields]
 
     #unique filter for operatingDay and journeyReference
-    journeyKeys = np.empty(
-        len(stops),
-        dtype=[
+    journeyKeys = np.empty(len(stops),
+        dtype = [
             ("operatingDay", "int64"),
-            ("journeyRef", "U100"),
+            ("journeyRef",   "U100" ),
         ]
     )
     journeyKeys["operatingDay"] = stops[:, 0]
-    journeyKeys["journeyRef"] = stops[:, 1]
-    uniqueJourneys, journeyPos = np.unique(
+    journeyKeys["journeyRef"]   = stops[:, 1]
+    uniqueJourneys, journeyPos  = np.unique(
         journeyKeys,
         return_inverse=True
     )
@@ -171,8 +175,10 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
     #initialize svg
     svgDict, linesPathDict, trainIconDict, _ = visualizeMap.parseSvg(inputSvgPath)
 
+    print(journeys_fields)
+
     def get_frame(t):
-        analysisTime = 60*t*renderMinutesPerMovieSecond + startUnixTimestamp
+        analysisTime = np.datetime64(60*t*renderMinutesPerMovieSecond + startUnixTimestamp, "s")
         events = np.stack((recordArray2d["arrivalEstimate"],recordArray2d["departureEstimate"]), axis=2).reshape(recordArray2d.shape[0], -1)
         eventsDelta = events - analysisTime
 
@@ -185,7 +191,12 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
         atStation    = (nextEventIdx % 2).astype("bool")              #true if at station, false if on track between
 
         if(np.sum(journeyInProgress)<1):
-            continue
+            return
+
+        filteredEventsDelta = eventsDelta[journeyInProgress]
+        arrivalMask         = np.arange(filteredEventsDelta.shape[1]) % 2 == 0
+        arrivalInFuture     = ~np.isnat(filteredEventsDelta) & (filteredEventsDelta >= np.timedelta64(0, "s")) & arrivalMask[None, :]
+        nextArrivalIdx      = np.argmax(arrivalInFuture[journeyInProgress], axis=1)
 
         recordArrayInProgress = recordArray2d[journeyInProgress]
         filteredEstimateEvents = events[journeyInProgress]
@@ -194,14 +205,18 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
         rows = np.arange(len(prevEventIdx))
         timeBetweenStations = filteredEstimateEvents[rows,nextEventIdx] - filteredEstimateEvents[rows,prevEventIdx]
         timeAfterStation    = analysisTime - filteredEstimateEvents[rows,prevEventIdx]
-        positionInterpol = (timeAfterStation/timeBetweenStations)*(1-atStation) + (prevEventIdx//2)
-        print(f"recordArrayInProgress {recordArrayInProgress}")
-        print(f"interpol {positionInterpol}")
+        positionInterpol    = (timeAfterStation/timeBetweenStations)*(1-atStation) + (prevEventIdx//2)
+
+        nextStopIdx = np.where(atStation, nextEventIdx, nextArrivalIdx)
+        prevStopRef = recordArrayInProgress["stopPointRef"][rows, prevEventIdx//2]
+        nextStopRef = recordArrayInProgress["stopPointRef"][rows, nextStopIdx//2]
+        #print(f"recordArrayInProgress {recordArrayInProgress}")
+        #print(f"interpol {positionInterpol}")
 
         #calculate delay
         delays = (filteredEstimateEvents[rows,prevEventIdx]-filteredTimetableEvents[rows,prevEventIdx]).astype("int")/60
-        print(f"delays {delays}")
-        print("\n")
+        #print(f"delays {delays}")
+        #print("\n")
 
         journeyRecords = [
             next(
@@ -212,23 +227,30 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
             )
             for key in uniqueJourneys[journeyInProgress]
         ]
-        print(journeyRecords)
-        #delay = recordArray2d["arrivalTimetable"][journeyInProgress][rows,prevEventIdx//2]
-        continue
-        #np.argmax(inFuture, axis=1) #first index that is in the future
+        #print(journeyRecords)
 
 
         title = "Livekarte, aktualisiert "
         title += str(datetime.now().strftime('%d.%m.%Y %H:%M:%S'))
         svgDictCopy = deepcopy(svgDict)
         visualizeMap.changeMapTitle(svgDictCopy, title)
-        with open(inputDataJsonPath) as inputfile:
-            jsonData = json.loads(inputfile.read())
-            if jsonData["info"]["attachedDataFormatRevision"] != dataFormatRevision:
-                logging.error("incompatible json data file version")
-                return
-            runningTrainsDict = jsonData["journeys"]
-        visualizeMap.placeTrains(svgDictCopy, linesPathDict, trainIconDict, runningTrainsDict.values())
+
+        runningTrains = []
+        for journeyIdx, journey in enumerate(journeyRecords):
+            journDict = {}
+            for fieldIdx, field in enumerate(journeys_fields):
+                if field in ["lineName", "isCancelled", "origin", "destination", "incidentText"]:
+                    journDict[field] = journey[fieldIdx]
+            print(recordArrayInProgress["stopPointRef"].shape)
+            print(prevEventIdx[journeyIdx]//2)
+            print(nextEventIdx[journeyIdx]//2)
+            journDict["currentStopRef"]   = str(prevStopRef[journeyIdx])
+            journDict["nextStopRef"]      = str(nextStopRef[journeyIdx])
+            journDict["delayMinutes"]     = delays[journeyIdx]
+            journDict["progressNextStop"] = (positionInterpol%1)[journeyIdx]
+            print(journDict)
+            runningTrains.append(journDict)
+        visualizeMap.placeTrains(svgDictCopy, linesPathDict, trainIconDict, runningTrains)
         png = cairosvg.svg2png(bytestring=xmltodict.unparse(svgDictCopy).encode())
         return np.array(Image.open(BytesIO(png)).convert("RGB"))
     renderDurationSeconds = allTimestampsArray[-1]-allTimestampsArray[0]
@@ -243,4 +265,4 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
 
 #timestamp = int(datetime.now(timezone.utc).timestamp())
 timestamp = 1773100800
-render_mp4_for_date(timestamp-48*60*60, timestamp, ".test.svg")
+render_mp4_for_date(timestamp-48*60*60, timestamp, "test.svg")

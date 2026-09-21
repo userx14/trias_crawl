@@ -10,6 +10,7 @@
       svgpathtools
       xmltodict
       matplotlib
+      moviepy
     ]);
   in
   {
