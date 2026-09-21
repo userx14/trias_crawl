@@ -119,6 +119,80 @@ def render_liveGraph(inputDataJsonPath, svgOutPath):
     fig.savefig(svgOutPath)
 """
 
+def getRunningTrainsAtTime(stopsArray2d, journeysArray, fieldNames, analysisTime):
+    esEvents = np.stack((stopsArray2d["arrivalEstimate"], stopsArray2d["departureEstimate"]), axis=2)
+    esEvents = esEvents.reshape(stopsArray2d.shape[0], -1)
+    esEventsDelta = esEvents - analysisTime
+
+    inFuture = ~np.isnat(esEventsDelta) & (esEventsDelta >= np.timedelta64(0, "s"))
+    inPast   = ~np.isnat(esEventsDelta) & (esEventsDelta < np.timedelta64(0, "s"))
+    inProgress = np.any(inFuture, axis=1) & np.any(inPast, axis=1)
+
+    if np.sum(inProgress) == 0: #no running journey at analysis time
+        return []
+
+    progStopsArray    = stopsArray2d[inProgress]
+    progEsEvents      = esEvents[inProgress]
+    progEsEventsDelta = esEventsDelta[inProgress]
+    progInFuture      = inFuture[inProgress]
+    progInPas         = inPast[inProgress]
+    nextEventIdx      = np.argmax(progInFuture, axis=1) #first index that is in the future
+    prevEventIdx      = progEsEventsDelta.shape[1] - 1 - np.argmax(inPast[inProgress,::-1], axis=1) #last index that is in the past
+    atStation         = (nextEventIdx % 2).astype("bool") #true if at station, false if on track between
+    arrivalMask       = np.arange(progEsEventsDelta.shape[1]) % 2 == 0
+    print(f"arrivalMask {arrivalMask}")
+    nextArrivalIdx    = np.argmax(progInFuture & arrivalMask, axis=1)
+
+    #position interpolation
+    rows                = np.arange(progEsEventsDelta.shape[0])
+    timeBetweenStations = progEsEvents[rows,nextEventIdx] - progEsEvents[rows,prevEventIdx]
+    timeAfterStation    = analysisTime - progEsEvents[rows,prevEventIdx]
+    progress    = (timeAfterStation/timeBetweenStations)#*(1-atStation)
+
+    #current and next stopRef
+    print(rows)
+    print(progStopsArray["stopPointRef"].shape)
+    print(f"prevEventHalf: {prevEventIdx//2}")
+    print(f"nextArrIdxhalf: {nextArrivalIdx//2}")
+    prevStopRef = progStopsArray["stopPointRef"][rows, prevEventIdx//2]
+    nextStopRef = progStopsArray["stopPointRef"][rows, nextArrivalIdx//2]
+
+    #calculate delay
+    progTtEvents = np.stack((progStopsArray["arrivalTimetable"], progStopsArray["departureTimetable"]), axis=2)
+    progTtEvents = progTtEvents.reshape(progEsEventsDelta.shape[0], -1)
+    delays = (progEsEvents[rows,prevEventIdx]-progTtEvents[rows,prevEventIdx]).astype("int")/60
+
+    progJourneys = journeysArray[inProgress]
+    runningTrains = []
+    for journeyIdx in range(progEsEventsDelta.shape[0]):
+        journDict = {}
+        for fieldIdx, field in enumerate(fieldNames):
+            if field in ["lineName", "isCancelled", "origin", "destination", "incidentText"]:
+                journDict[field] = progJourneys[journeyIdx][fieldIdx]
+        print(progStopsArray["stopPointRef"].shape)
+        print(prevEventIdx[journeyIdx]//2)
+        print(nextEventIdx[journeyIdx]//2)
+        journDict["currentStopRef"]   = str(prevStopRef[journeyIdx])
+        journDict["nextStopRef"]      = str(nextStopRef[journeyIdx])
+        if(journDict["currentStopRef"] == journDict["nextStopRef"]):
+            raise ValueError("Search this bug")
+        journDict["delayMinutes"]     = delays[journeyIdx]
+        journDict["progressNextStop"] = progress[journeyIdx]
+        print(journDict)
+        runningTrains.append(journDict)
+    return runningTrains
+
+    """
+    journeyRecords = [
+        next(
+            journey
+            for journey in journeys
+            if journey[0] == key["operatingDay"]
+            and journey[1] == key["journeyRef"]
+        )
+        for key in uniqueJourneys[journeyInProgress]
+    ]"""
+
 def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
     #getting data around this
     startOpdayUnixTimestamp = startUnixTimestamp - 36*60*60 #one and a half day offset for operating day
@@ -129,18 +203,22 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
 
     connection         = sqlite3.connect(db_data_source)
     cursor             = connection.cursor()
-    cursor.execute(f"SELECT * FROM journeys WHERE ?<=operatingDay AND operatingDay<=?;", (startOpdayUnixTimestamp,endOpdayUnixTimestamp))
-    journeys           = cursor.fetchall()
-    journeys_fields    = [description[0] for description in cursor.description]
-    operatingDays      = set([journey[0] for journey in journeys])
-
-    cursor.execute(f"SELECT * FROM stops WHERE ?<=operatingDay AND operatingDay<=? ORDER BY journeyRef ASC, stopIndex ASC;", (min(operatingDays),max(operatingDays),))
-    stops = cursor.fetchall()
-    stops = np.array(stops)
-
-    stopIndex   = stops[:, 2].astype(int) - 1
+    cursor.execute("""
+        SELECT j.*, s.*
+        FROM journeys AS j
+        JOIN stops    AS s
+        ON    j.operatingDay = s.operatingDay
+        AND   j.journeyRef   = s.journeyRef
+        WHERE j.operatingDay BETWEEN ? AND ?
+        ORDER BY j.operatingDay, j.journeyRef, s.stopIndex
+    """, (startOpdayUnixTimestamp, endOpdayUnixTimestamp))
+    journeysAndStops = np.array(cursor.fetchall())
+    fieldNames = [description[0] for description in cursor.description]
+    #split again into journey information and stop information arrays
+    stopIndex   = journeysAndStops[:, fieldNames.index("stopIndex")].astype(int) - 1 #from 1 indexed to 0 indexed
     maxNumStops = np.amax(stopIndex) + 1
-
+    opDayAndRef = np.asarray(journeysAndStops[:, :2], dtype="U100")
+    uniqueJourneyKeys, uniqueIndices, stopToJourneyMapping = np.unique(opDayAndRef[:, :2], axis=0, return_index=True, return_inverse=True)
     fields = [
         ("stopPointName",      "U100",          3, ""),
         ("stopPointRef",       "U50",           4, ""),
@@ -151,105 +229,27 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
         ("arrivalEstimate",    "datetime64[s]", 9, np.datetime64("NaT")),
     ]
     dtype = [(name, nptype) for name, nptype, _, _ in fields]
-
-    #unique filter for operatingDay and journeyReference
-    journeyKeys = np.empty(len(stops),
-        dtype = [
-            ("operatingDay", "int64"),
-            ("journeyRef",   "U100" ),
-        ]
-    )
-    journeyKeys["operatingDay"] = stops[:, 0]
-    journeyKeys["journeyRef"]   = stops[:, 1]
-    uniqueJourneys, journeyPos  = np.unique(
-        journeyKeys,
-        return_inverse=True
-    )
-
-    #initialize array
-    recordArray2d              = np.empty([len(uniqueJourneys), maxNumStops], dtype=dtype)
+    stopsArray2d = np.empty([len(uniqueJourneyKeys), maxNumStops], dtype=dtype)
     for name, _, idx, default in fields:
-        recordArray2d[name][:,:]                   = default
-        recordArray2d[name][journeyPos, stopIndex] = stops[:, idx]
+        stopsArray2d[name][:,:]                             = default
+        stopsArray2d[name][stopToJourneyMapping, stopIndex] = journeysAndStops[:, idx]
+    journeysArray = journeysAndStops[uniqueIndices]
 
     #initialize svg
     svgDict, linesPathDict, trainIconDict, _ = visualizeMap.parseSvg(inputSvgPath)
 
-    print(journeys_fields)
-
     def get_frame(t):
         analysisTime = np.datetime64(60*t*renderMinutesPerMovieSecond + startUnixTimestamp, "s")
-        events = np.stack((recordArray2d["arrivalEstimate"],recordArray2d["departureEstimate"]), axis=2).reshape(recordArray2d.shape[0], -1)
-        eventsDelta = events - analysisTime
-
-        inFuture = ~np.isnat(eventsDelta) & (eventsDelta >= np.timedelta64(0, "s"))
-        inPast   = ~np.isnat(eventsDelta) & (eventsDelta < np.timedelta64(0, "s"))
-        journeyInProgress = np.any(inFuture, axis=1) & np.any(inPast, axis=1)
-
-        nextEventIdx = np.argmax(inFuture[journeyInProgress], axis=1) #first index that is in the future
-        prevEventIdx = maxNumStops*2 - 1 - np.argmax(inPast[journeyInProgress,::-1], axis=1)
-        atStation    = (nextEventIdx % 2).astype("bool")              #true if at station, false if on track between
-
-        if(np.sum(journeyInProgress)<1):
-            return
-
-        filteredEventsDelta = eventsDelta[journeyInProgress]
-        arrivalMask         = np.arange(filteredEventsDelta.shape[1]) % 2 == 0
-        arrivalInFuture     = ~np.isnat(filteredEventsDelta) & (filteredEventsDelta >= np.timedelta64(0, "s")) & arrivalMask[None, :]
-        nextArrivalIdx      = np.argmax(arrivalInFuture[journeyInProgress], axis=1)
-
-        recordArrayInProgress = recordArray2d[journeyInProgress]
-        filteredEstimateEvents = events[journeyInProgress]
-        filteredTimetableEvents = np.stack((recordArrayInProgress["arrivalTimetable"],recordArrayInProgress["departureTimetable"]), axis=2).reshape(recordArrayInProgress.shape[0], -1)
-
-        rows = np.arange(len(prevEventIdx))
-        timeBetweenStations = filteredEstimateEvents[rows,nextEventIdx] - filteredEstimateEvents[rows,prevEventIdx]
-        timeAfterStation    = analysisTime - filteredEstimateEvents[rows,prevEventIdx]
-        positionInterpol    = (timeAfterStation/timeBetweenStations)*(1-atStation) + (prevEventIdx//2)
-
-        nextStopIdx = np.where(atStation, nextEventIdx, nextArrivalIdx)
-        prevStopRef = recordArrayInProgress["stopPointRef"][rows, prevEventIdx//2]
-        nextStopRef = recordArrayInProgress["stopPointRef"][rows, nextStopIdx//2]
-        #print(f"recordArrayInProgress {recordArrayInProgress}")
-        #print(f"interpol {positionInterpol}")
-
-        #calculate delay
-        delays = (filteredEstimateEvents[rows,prevEventIdx]-filteredTimetableEvents[rows,prevEventIdx]).astype("int")/60
-        #print(f"delays {delays}")
-        #print("\n")
-
-        journeyRecords = [
-            next(
-                journey
-                for journey in journeys
-                if journey[0] == key["operatingDay"]
-                and journey[1] == key["journeyRef"]
-            )
-            for key in uniqueJourneys[journeyInProgress]
-        ]
+        runningTrains = getRunningTrainsAtTime(stopsArray2d, journeysArray, fieldNames, analysisTime)
         #print(journeyRecords)
 
 
         title = "Livekarte, aktualisiert "
-        title += str(datetime.now().strftime('%d.%m.%Y %H:%M:%S'))
+        title += str(analysisTime.astype(datetime).strftime('%d.%m.%Y %H:%M:%S'))
         svgDictCopy = deepcopy(svgDict)
         visualizeMap.changeMapTitle(svgDictCopy, title)
 
-        runningTrains = []
-        for journeyIdx, journey in enumerate(journeyRecords):
-            journDict = {}
-            for fieldIdx, field in enumerate(journeys_fields):
-                if field in ["lineName", "isCancelled", "origin", "destination", "incidentText"]:
-                    journDict[field] = journey[fieldIdx]
-            print(recordArrayInProgress["stopPointRef"].shape)
-            print(prevEventIdx[journeyIdx]//2)
-            print(nextEventIdx[journeyIdx]//2)
-            journDict["currentStopRef"]   = str(prevStopRef[journeyIdx])
-            journDict["nextStopRef"]      = str(nextStopRef[journeyIdx])
-            journDict["delayMinutes"]     = delays[journeyIdx]
-            journDict["progressNextStop"] = (positionInterpol%1)[journeyIdx]
-            print(journDict)
-            runningTrains.append(journDict)
+
         visualizeMap.placeTrains(svgDictCopy, linesPathDict, trainIconDict, runningTrains)
         png = cairosvg.svg2png(bytestring=xmltodict.unparse(svgDictCopy).encode())
         return np.array(Image.open(BytesIO(png)).convert("RGB"))
