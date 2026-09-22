@@ -10,6 +10,9 @@ from dataclasses import dataclass, fields
 import matplotlib.dates as mdates
 import visualizeMap
 from moviepy import VideoClip
+import cairosvg
+from PIL import Image
+from io import BytesIO
 
 logging.basicConfig(
     #filename=base_dir/"error.log",
@@ -21,7 +24,7 @@ base_dir               = Path(__file__).parent
 yearInt                = datetime.now().year
 db_data_source         = base_dir/f'loggedJourney_{yearInt}.db'
 dataFormatRevision     = "2026.03.11"
-
+mp4fps = 60
 inputSvgPath = "live_map_source_light.svg"
 
 sBahnLineColors = {
@@ -119,6 +122,26 @@ def render_liveGraph(inputDataJsonPath, svgOutPath):
     fig.savefig(svgOutPath)
 """
 
+def placeTrainsDelta(linesPathDict, trainIconDict, runningTrains):
+    svgTrainIcons = []
+    for trainData in runningTrains:
+        rawLineName = trainData["lineName"]
+        cStopRef    = trainData["currentStopRef"]
+        nStopRef    = trainData["nextStopRef"]
+        if(cStopRef == nStopRef):
+            raise ValueError("cStopRef and nStopRef cannot be equal, no directionality to train!")
+        lineName, cStatIdx, nStatIdx = visualizeMap.getStopIndices(rawLineName, linesPathDict, cStopRef, nStopRef)
+        if lineName is None:
+            continue
+        if trainData["isCancelled"]:
+            continue
+        delay           = trainData["delayMinutes"]
+        progress        = trainData["progressNextStop"]
+        trainPos, angle = visualizeMap.getPosAngleFromPath(lineName, linesPathDict, cStatIdx, nStatIdx, progress)
+        trainIcon       = visualizeMap.getTrainIcon(trainIconDict, delay, trainPos, angle)
+    return svgTrainIcons
+
+
 def getRunningTrainsAtTime(stopsArray2d, journeysArray, fieldNames, analysisTime):
     esEvents = np.stack((stopsArray2d["arrivalEstimate"], stopsArray2d["departureEstimate"]), axis=2)
     esEvents = esEvents.reshape(stopsArray2d.shape[0], -1)
@@ -140,7 +163,6 @@ def getRunningTrainsAtTime(stopsArray2d, journeysArray, fieldNames, analysisTime
     prevEventIdx      = progEsEventsDelta.shape[1] - 1 - np.argmax(inPast[inProgress,::-1], axis=1) #last index that is in the past
     atStation         = (nextEventIdx % 2).astype("bool") #true if at station, false if on track between
     arrivalMask       = np.arange(progEsEventsDelta.shape[1]) % 2 == 0
-    print(f"arrivalMask {arrivalMask}")
     nextArrivalIdx    = np.argmax(progInFuture & arrivalMask, axis=1)
 
     #position interpolation
@@ -150,10 +172,6 @@ def getRunningTrainsAtTime(stopsArray2d, journeysArray, fieldNames, analysisTime
     progress    = (timeAfterStation/timeBetweenStations)#*(1-atStation)
 
     #current and next stopRef
-    print(rows)
-    print(progStopsArray["stopPointRef"].shape)
-    print(f"prevEventHalf: {prevEventIdx//2}")
-    print(f"nextArrIdxhalf: {nextArrivalIdx//2}")
     prevStopRef = progStopsArray["stopPointRef"][rows, prevEventIdx//2]
     nextStopRef = progStopsArray["stopPointRef"][rows, nextArrivalIdx//2]
 
@@ -169,16 +187,12 @@ def getRunningTrainsAtTime(stopsArray2d, journeysArray, fieldNames, analysisTime
         for fieldIdx, field in enumerate(fieldNames):
             if field in ["lineName", "isCancelled", "origin", "destination", "incidentText"]:
                 journDict[field] = progJourneys[journeyIdx][fieldIdx]
-        print(progStopsArray["stopPointRef"].shape)
-        print(prevEventIdx[journeyIdx]//2)
-        print(nextEventIdx[journeyIdx]//2)
         journDict["currentStopRef"]   = str(prevStopRef[journeyIdx])
         journDict["nextStopRef"]      = str(nextStopRef[journeyIdx])
         if(journDict["currentStopRef"] == journDict["nextStopRef"]):
             raise ValueError("Search this bug")
         journDict["delayMinutes"]     = delays[journeyIdx]
         journDict["progressNextStop"] = progress[journeyIdx]
-        print(journDict)
         runningTrains.append(journDict)
     return runningTrains
 
@@ -219,27 +233,27 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
     maxNumStops = np.amax(stopIndex) + 1
     opDayAndRef = np.asarray(journeysAndStops[:, :2], dtype="U100")
     uniqueJourneyKeys, uniqueIndices, stopToJourneyMapping = np.unique(opDayAndRef[:, :2], axis=0, return_index=True, return_inverse=True)
-    fields = [
-        ("stopPointName",      "U100",          3, ""),
-        ("stopPointRef",       "U50",           4, ""),
-        ("isNotServiced",      "bool",          5, False),
-        ("departureTimetable", "datetime64[s]", 6, np.datetime64("NaT")),
-        ("departureEstimate",  "datetime64[s]", 7, np.datetime64("NaT")),
-        ("arrivalTimetable",   "datetime64[s]", 8, np.datetime64("NaT")),
-        ("arrivalEstimate",    "datetime64[s]", 9, np.datetime64("NaT")),
+    stopArrayFields = [
+        ("stopPointName",      "U100",          ""),
+        ("stopPointRef",       "U50",           ""),
+        ("isNotServiced",      "bool",          False),
+        ("departureTimetable", "datetime64[s]", np.datetime64("NaT")),
+        ("departureEstimate",  "datetime64[s]", np.datetime64("NaT")),
+        ("arrivalTimetable",   "datetime64[s]", np.datetime64("NaT")),
+        ("arrivalEstimate",    "datetime64[s]", np.datetime64("NaT")),
     ]
-    dtype = [(name, nptype) for name, nptype, _, _ in fields]
+    dtype = [(name, nptype) for name, nptype,  _ in stopArrayFields]
     stopsArray2d = np.empty([len(uniqueJourneyKeys), maxNumStops], dtype=dtype)
-    for name, _, idx, default in fields:
+    for name, _, default in stopArrayFields:
+        sourceIdx = fieldNames.index(name)
         stopsArray2d[name][:,:]                             = default
-        stopsArray2d[name][stopToJourneyMapping, stopIndex] = journeysAndStops[:, idx]
+        stopsArray2d[name][stopToJourneyMapping, stopIndex] = journeysAndStops[:, sourceIdx]
     journeysArray = journeysAndStops[uniqueIndices]
 
     #initialize svg
     svgDict, linesPathDict, trainIconDict, _ = visualizeMap.parseSvg(inputSvgPath)
-
     def get_frame(t):
-        analysisTime = np.datetime64(60*t*renderMinutesPerMovieSecond + startUnixTimestamp, "s")
+        analysisTime = np.datetime64(int(60*t*renderMinutesPerMovieSecond + startUnixTimestamp), "s")
         runningTrains = getRunningTrainsAtTime(stopsArray2d, journeysArray, fieldNames, analysisTime)
         #print(journeyRecords)
 
@@ -248,13 +262,23 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, outputSvgPath):
         title += str(analysisTime.astype(datetime).strftime('%d.%m.%Y %H:%M:%S'))
         svgDictCopy = deepcopy(svgDict)
         visualizeMap.changeMapTitle(svgDictCopy, title)
-
-
+        """
+        overlaySvg = {
+            "svg": {
+                "@xmlns": "http://www.w3.org/2000/svg",
+                "@width": svgDict["svg"]["@width"],
+                "@height": svgDict["svg"]["@height"],
+                "@viewBox": svgDict["svg"]["@viewBox"],
+                "path": []
+            }
+        }
+        overlaySvg["svg"]["path"] += placeTrainsDelta(linesPathDict, trainIconDict, runningTrains)
+        """
         visualizeMap.placeTrains(svgDictCopy, linesPathDict, trainIconDict, runningTrains)
         png = cairosvg.svg2png(bytestring=xmltodict.unparse(svgDictCopy).encode())
         return np.array(Image.open(BytesIO(png)).convert("RGB"))
-    renderDurationSeconds = allTimestampsArray[-1]-allTimestampsArray[0]
-    renderMinutesPerMovieSecond = 60
+    renderDurationSeconds = (allTimestampsArray[-1]-allTimestampsArray[0]).item().total_seconds()
+    renderMinutesPerMovieSecond = 15
     clip = VideoClip(get_frame, duration=(renderDurationSeconds/60)/renderMinutesPerMovieSecond)
     clip.write_videofile(f"{startUnixTimestamp}_{endUnixTimestamp}.mp4", fps=mp4fps)
 
