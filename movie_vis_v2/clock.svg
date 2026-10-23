@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg height="200" width="500" xmlns="http://www.w3.org/2000/svg">
+	<text style="font-size:14px; font-familiy:sans-serif" x="0" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0;0.14149295524305555" calcMode="discrete" begin="0s" dur="36.0s" repeatDur="36.0s" fill="freeze"></animate>
+21.10.2026	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="0" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="hidden;visible" keyTimes="0;0.14149295524305555" calcMode="discrete" begin="0s" dur="36.0s" repeatDur="36.0s" fill="freeze"></animate>
+22.10.2026	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="96" y="15" visibility="visible">:</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="117" y="15" visibility="visible">:</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="80" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.4166666666666667" calcMode="discrete" begin="-30.90625s" dur="36.0s" repeatDur="66.90625s" repeatCount="indefinite" fill="freeze"></animate>
+0	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="80" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.4166666666666667" calcMode="discrete" begin="-15.90625s" dur="36.0s" repeatDur="51.90625s" repeatCount="indefinite" fill="freeze"></animate>
+1	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="80" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.16666666666666666" calcMode="discrete" begin="-0.90625s" dur="36.0s" repeatDur="36.90625s" repeatCount="indefinite" fill="freeze"></animate>
+2	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="88" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden;visible;hidden;visible;hidden" keyTimes="0.0;0.041666666666666664;0.4166666666666667;0.4583333333333333;0.8333333333333334;0.875" calcMode="discrete" begin="-30.90625s" dur="36.0s" repeatDur="66.90625s" repeatCount="indefinite" fill="freeze"></animate>
+0	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="88" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden;visible;hidden;visible;hidden" keyTimes="0.0;0.041666666666666664;0.4166666666666667;0.4583333333333333;0.8333333333333334;0.875" calcMode="discrete" begin="-29.40625s" dur="36.0s" repeatDur="65.40625s" repeatCount="indefinite" fill="freeze"></animate>
+1	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="88" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden;visible;hidden;visible;hidden" keyTimes="0.0;0.041666666666666664;0.4166666666666667;0.4583333333333333;0.8333333333333334;0.875" calcMode="discrete" begin="-27.90625s" dur="36.0s" repeatDur="63.90625s" repeatCount="indefinite" fill="freeze"></animate>
+2	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="88" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden;visible;hidden;visible;hidden" keyTimes="0.0;0.041666666666666664;0.4166666666666667;0.4583333333333333;0.8333333333333334;0.875" calcMode="discrete" begin="-26.40625s" dur="36.0s" repeatDur="62.40625s" repeatCount="indefinite" fill="freeze"></animate>
+3	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="88" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden;visible;hidden" keyTimes="0.0;0.041666666666666664;0.4166666666666667;0.4583333333333333" calcMode="discrete" begin="-24.90625s" dur="36.0s" repeatDur="60.90625s" repeatCount="indefinite" fill="freeze"></animate>
+4	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="88" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden;visible;hidden" keyTimes="0.0;0.041666666666666664;0.4166666666666667;0.4583333333333333" calcMode="discrete" begin="-23.40625s" dur="36.0s" repeatDur="59.40625s" repeatCount="indefinite" fill="freeze"></animate>
+5	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="88" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden;visible;hidden" keyTimes="0.0;0.041666666666666664;0.4166666666666667;0.4583333333333333" calcMode="discrete" begin="-21.90625s" dur="36.0s" repeatDur="57.90625s" repeatCount="indefinite" fill="freeze"></animate>
+6	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="88" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden;visible;hidden" keyTimes="0.0;0.041666666666666664;0.4166666666666667;0.4583333333333333" calcMode="discrete" begin="-20.40625s" dur="36.0s" repeatDur="56.40625s" repeatCount="indefinite" fill="freeze"></animate>
+7	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="88" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden;visible;hidden" keyTimes="0.0;0.041666666666666664;0.4166666666666667;0.4583333333333333" calcMode="discrete" begin="-18.90625s" dur="36.0s" repeatDur="54.90625s" repeatCount="indefinite" fill="freeze"></animate>
+8	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="88" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden;visible;hidden" keyTimes="0.0;0.041666666666666664;0.4166666666666667;0.4583333333333333" calcMode="discrete" begin="-17.40625s" dur="36.0s" repeatDur="53.40625s" repeatCount="indefinite" fill="freeze"></animate>
+9	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="101" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.16666666666666666" calcMode="discrete" begin="-0.90625s" dur="1.5s" repeatDur="36.90625s" repeatCount="indefinite" fill="freeze"></animate>
+0	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="101" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.16666666666666666" calcMode="discrete" begin="-0.65625s" dur="1.5s" repeatDur="36.65625s" repeatCount="indefinite" fill="freeze"></animate>
+1	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="101" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.16666666666666666" calcMode="discrete" begin="-0.40625s" dur="1.5s" repeatDur="36.40625s" repeatCount="indefinite" fill="freeze"></animate>
+2	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="101" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.16666666666666666" calcMode="discrete" begin="-0.15625s" dur="1.5s" repeatDur="36.15625s" repeatCount="indefinite" fill="freeze"></animate>
+3	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="101" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.16666666666666666" calcMode="discrete" begin="-1.40625s" dur="1.5s" repeatDur="37.40625s" repeatCount="indefinite" fill="freeze"></animate>
+4	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="101" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.16666666666666666" calcMode="discrete" begin="-1.15625s" dur="1.5s" repeatDur="37.15625s" repeatCount="indefinite" fill="freeze"></animate>
+5	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="109" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.15625s" dur="0.25s" repeatDur="36.15625s" repeatCount="indefinite" fill="freeze"></animate>
+0	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="109" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.13125000000000142s" dur="0.25s" repeatDur="36.13125s" repeatCount="indefinite" fill="freeze"></animate>
+1	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="109" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.10624999999999929s" dur="0.25s" repeatDur="36.10625s" repeatCount="indefinite" fill="freeze"></animate>
+2	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="109" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.08125000000000071s" dur="0.25s" repeatDur="36.08125s" repeatCount="indefinite" fill="freeze"></animate>
+3	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="109" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.05624999999999858s" dur="0.25s" repeatDur="36.05625s" repeatCount="indefinite" fill="freeze"></animate>
+4	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="109" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.03125s" dur="0.25s" repeatDur="36.03125s" repeatCount="indefinite" fill="freeze"></animate>
+5	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="109" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.006250000000001421s" dur="0.25s" repeatDur="36.00625s" repeatCount="indefinite" fill="freeze"></animate>
+6	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="109" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.2312499999999993s" dur="0.25s" repeatDur="36.23125s" repeatCount="indefinite" fill="freeze"></animate>
+7	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="109" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.2062500000000007s" dur="0.25s" repeatDur="36.20625s" repeatCount="indefinite" fill="freeze"></animate>
+8	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="109" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.18124999999999858s" dur="0.25s" repeatDur="36.18125s" repeatCount="indefinite" fill="freeze"></animate>
+9	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="122" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.16666666666666666" calcMode="discrete" begin="-0.006249999999998285s" dur="0.025s" repeatDur="36.00625s" repeatCount="indefinite" fill="freeze"></animate>
+0	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="122" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.16666666666666666" calcMode="discrete" begin="-0.002083333333331855s" dur="0.025s" repeatDur="36.00208333333333s" repeatCount="indefinite" fill="freeze"></animate>
+1	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="122" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.16666666666666666" calcMode="discrete" begin="-0.022916666666665426s" dur="0.025s" repeatDur="36.02291666666667s" repeatCount="indefinite" fill="freeze"></animate>
+2	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="122" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.16666666666666666" calcMode="discrete" begin="-0.018749999999998997s" dur="0.025s" repeatDur="36.01875s" repeatCount="indefinite" fill="freeze"></animate>
+3	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="122" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.16666666666666666" calcMode="discrete" begin="-0.014583333333332567s" dur="0.025s" repeatDur="36.014583333333334s" repeatCount="indefinite" fill="freeze"></animate>
+4	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="122" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.16666666666666666" calcMode="discrete" begin="-0.010416666666666137s" dur="0.025s" repeatDur="36.010416666666664s" repeatCount="indefinite" fill="freeze"></animate>
+5	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="130" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.002083333333333762s" dur="0.004166666666666667s" repeatDur="36.00208333333333s" repeatCount="indefinite" fill="freeze"></animate>
+0	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="130" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.0016666666666674745s" dur="0.004166666666666667s" repeatDur="36.001666666666665s" repeatCount="indefinite" fill="freeze"></animate>
+1	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="130" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.0012500000000011868s" dur="0.004166666666666667s" repeatDur="36.00125s" repeatCount="indefinite" fill="freeze"></animate>
+2	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="130" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.0008333333333348991s" dur="0.004166666666666667s" repeatDur="36.00083333333333s" repeatCount="indefinite" fill="freeze"></animate>
+3	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="130" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.00041666666666861137s" dur="0.004166666666666667s" repeatDur="36.000416666666666s" repeatCount="indefinite" fill="freeze"></animate>
+4	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="130" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.0041666666666654376s" dur="0.004166666666666667s" repeatDur="36.00416666666666s" repeatCount="indefinite" fill="freeze"></animate>
+5	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="130" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.00374999999999915s" dur="0.004166666666666667s" repeatDur="36.00375s" repeatCount="indefinite" fill="freeze"></animate>
+6	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="130" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.003333333333332862s" dur="0.004166666666666667s" repeatDur="36.00333333333333s" repeatCount="indefinite" fill="freeze"></animate>
+7	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="130" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.0029166666666665744s" dur="0.004166666666666667s" repeatDur="36.002916666666664s" repeatCount="indefinite" fill="freeze"></animate>
+8	</text>
+	<text style="font-size:14px; font-familiy:sans-serif" x="130" y="15" visibility="hidden">
+		<animate attributeName="visibility" values="visible;hidden" keyTimes="0.0;0.1" calcMode="discrete" begin="-0.0025000000000002867s" dur="0.004166666666666667s" repeatDur="36.0025s" repeatCount="indefinite" fill="freeze"></animate>
+9	</text>
+</svg>
