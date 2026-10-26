@@ -34,6 +34,28 @@ def importLegend(posX, posY, svgPath):
             legendGroup[key] = value
     return legendGroup
 
+def parseSvg(inputSvgPath):
+    with open(inputSvgPath, "r") as inputSvg:
+        svgFile = inputSvg.read()
+    svgDict = xmltodict.parse(svgFile, force_list=["g", "path", "text"])
+    lineIds       = ["S1", "S2", "S3", "S4", "S5", "S6", "S60", "S62"]
+    linesPathDict = dict()
+
+    #search for SBahn Line Paths and Train Arrows and store references
+    for group in svgDict["svg"]["g"]: #in paths that are grouped
+        if "path" in group.keys():
+            for path in group["path"]:
+                if "@id" not in path.keys():
+                    continue
+                pathId = path["@id"]
+                if pathId in lineIds:
+                    linesPathDict[pathId] = path
+
+    if len(lineIds) != len(linesPathDict):
+        raise ValueError("Missing line or icon in svg")
+
+    return svgDict, linesPathDict
+
 
 def svgAnimatedTitle(startDatetime, endDatetime, timeCompression,
     offsetX = 500, offsetY = 150,
@@ -43,7 +65,15 @@ def svgAnimatedTitle(startDatetime, endDatetime, timeCompression,
     colonSpacing = textSize*0.3
 
     textElementsList = []
-    textTemplateDict = {"@font-size": str(textSize), "@font-familiy": "sans-serif", "@x":None, "@y":offsetY, "#text": None, "@visibility": "hidden", "@fill": "#000000"}
+    textTemplateDict = {
+        "@font-size":    str(textSize),
+        "@font-familiy": "sans-serif",
+        "@x":            None,
+        "@y":            offsetY,
+        "#text":         None,
+        "@visibility":  "hidden",
+        "@fill":        "#000000"
+    }
 
     #calculate total duration
     repeatDurSec = (endDatetime-startDatetime).total_seconds()
@@ -160,7 +190,6 @@ def interpolateDelayColor(delayArray):
     rgbArray = np.rint(np.column_stack(channels)).astype(np.uint8)
     return np.array([f"#{r:02X}{g:02X}{b:02X}" for r, g, b in rgbArray])
 
-    return rgbArray
 
 def getPathStationLengthRatio(linesPathDict, lineName, stationRef):
     segmBetweenStops = 3
@@ -177,6 +206,7 @@ def getPathStationLengthRatio(linesPathDict, lineName, stationRef):
     totalPathLength         = [segment.length() for segment in parsedPath]
     return sum(pathLengthBeforeStation) / sum(totalPathLength)
 
+
 def remove_center_duplicates(timestamps, values):
     mask = np.ones(len(values), dtype=bool)
     mask[1:-1] = (
@@ -185,8 +215,11 @@ def remove_center_duplicates(timestamps, values):
     )
     return timestamps[mask], values[mask]
 
+
 def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, timeCompression, outputSvgPath):
-    #getting data around this
+    totalTimeSec = endUnixTimestamp - startUnixTimestamp
+
+    #getting data around this time range
     startOpdayUnixTimestamp = startUnixTimestamp - 36*60*60 #one and a half day offset for operating day
     endOpdayUnixTimestamp   = endUnixTimestamp   + 36*60*60
 
@@ -227,100 +260,131 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, timeCompression, o
 
     #initialize svg
     print(f"inputSvgPath {inputSvgPath}")
-    svgDict, linesPathDict, trainIconDict, _ = visualizeMap.parseSvg(inputSvgPath)
+    svgDict, linesPathDict = parseSvg(inputSvgPath)
     pathList = []
-    """
     for journeyIdx, journey in enumerate(journeysArray):
-        print(journey[fieldNames.index("journeyRef")])
+
         stops = stopsArray2d[journeyIdx]
-        filterDep = ~np.isnan(stops["departureEstimate"])
-        filterArr = ~np.isnan(stops["arrivalEstimate"])
-        depEs = (stops["departureEstimate"][filterDep].astype(int) - startUnixTimestamp)
-        arrEs = (stops["arrivalEstimate"][filterArr].astype(int)   - startUnixTimestamp)
-        depEsDel = (stops["departureEstimate"][filterDep].astype(int) - stops["departureTimetable"][filterDep].astype(int))/60
-        arrEsDel = (stops["arrivalEstimate"][filterArr].astype(int)   - stops["arrivalTimetable"][filterArr].astype(int))/60
+        interleavedES        = np.column_stack((stops["arrivalEstimate"], stops["departureEstimate"])).flatten().astype("int")
+        interleavedFilter    = (startUnixTimestamp < interleavedES) & (interleavedES < endUnixTimestamp)
 
-        #todo eliminate Nan values, that get mapped to int
-        #select path, and get progress in said path
-        stopRef = stops["stopPointRef"]
-        lineName = journey[fieldNames.index("lineName")]
+        interleavedTT        = np.column_stack((stops["arrivalTimetable"], stops["departureTimetable"])).flatten().astype("int")
+        interleavedDelay     = (interleavedES - interleavedTT)[interleavedFilter]
+        interleavedStopRefs  = np.repeat(stops["stopPointRef"], 2)[interleavedFilter]
 
-        interleavedTimestamps = np.empty(len(depEs)*2, dtype=int)
-        if len(depEs) != len(arrEs):
-            print("unequelLen!")
+        def normalize_stop_ref(ref):
+            ref = ":".join(ref.split(":")[:3])
+            return "de:08111:6118" if ref == "de:08111:6115" else ref #convert HBF oben to HBF tief
+
+        interleavedStopRefs = np.array([
+            normalize_stop_ref(ref) for ref in interleavedStopRefs
+        ])
+
+        interleavedAnimT     = (interleavedES - startUnixTimestamp)[interleavedFilter]
+
+        #force monotonic
+        interleavedAnimT     = np.maximum.accumulate(interleavedAnimT)
+        if interleavedAnimT.size < 3:
             continue
-        interleavedTimestamps[0::2] = depEs
-        interleavedTimestamps[1::2] = arrEs
-        if np.any(interleavedTimestamps < 0):
-            print("skip, one station too early")
-            continue
-        if np.any(interleavedTimestamps > int(endUnixTimestamp-startUnixTimestamp)):
-            print("skip, one station too late")
-            continue
+        print(journey[fieldNames.index("journeyRef")])
 
-        interleavedDelays = np.empty(interleavedTimestamps.shape, dtype=int)
-        interleavedDelays[0::2] = depEsDel
-        interleavedDelays[1::2] = arrEsDel
-
-        pathKeyframes = np.empty(interleavedTimestamps.shape, dtype=float)
-        delayColors   = interpolateDelayColor(interleavedDelays)
-        for tsIdx, timestamp in enumerate(interleavedTimestamps):
-            stopReference = stopRef[int((tsIdx+1)//2)]
-            pathKeyframes[tsIdx] = getPathStationLengthRatio(linesPathDict, lineName, stopReference)
-        pathId = lineName #todo change this to handle lines like S42
-        animationStartTimeSec = interleavedTimestamps[0] / timeCompression
-        animationDorationSec  = (interleavedTimestamps[-1] - interleavedTimestamps[0]) / timeCompression
-        #determine icon rotation
-        resolvedLineName, cIdx, nIdx = visualizeMap.getStopIndices(lineName, linesPathDict, stopRef[0], stopRef[1])
-        if (cIdx < nIdx):
-            symbolRotation = "auto"
+        #split lines like S24 into two path animations
+        rawLineName = journey[fieldNames.index("lineName")]
+        #assign first line
+        if rawLineName in linesStations.keys():
+            animDataList = [
+                {
+                    "timestamps": interleavedAnimT,
+                    "delayColor": interpolateDelayColor(interleavedDelay/60),
+                    "lineName"  : rawLineName,
+                }
+            ]
+            lineStopRefs = [station[0] for station in linesStations[rawLineName]]
+            if lineStopRefs.index(interleavedStopRefs[0]) < lineStopRefs.index(interleavedStopRefs[2]):
+                animDataList[0]["symbolRotation"] = "auto"
+            else:
+                animDataList[0]["symbolRotation"] = "auto-reverse"
+            animDataList[0]["pathValues"] = np.empty(interleavedAnimT.shape, dtype=float)
+            for tsIdx in range(len(animDataList[0]["timestamps"])):
+                animDataList[0]["pathValues"][tsIdx] = getPathStationLengthRatio(linesPathDict, rawLineName, interleavedStopRefs[tsIdx])
         else:
-            symbolRotation = "auto-reverse"
-        animateVisibilityDict = {
-            "@attributeName": "visibility",
-            "@begin":         f"{animationStartTimeSec}s",
-            "@dur":           f"{animationDorationSec}s",
-            "@fill":          "remove", #restore original state
-            "@values":        "visible",
-            "@repeatCount":   1,
-        }
-        colorTimestamp, delayColors = remove_center_duplicates(interleavedTimestamps, delayColors)
-        colorTimestamp = np.round((colorTimestamp-colorTimestamp[0])/(colorTimestamp[-1]-colorTimestamp[0]), 4)
-        animateColorDict = {
-            "@attributeName": "fill",
-            "@begin":         f"{animationStartTimeSec}s",
-            "@dur":           f"{animationDorationSec}s",
-            "@keyTimes":      ";".join(colorTimestamp.astype(str)),
-            "@values":        ";".join(delayColors),
-            "@fill":          "remove", #keep final state of animation
-            "@repeatCount":   1,
-        }
-        pathTimestamp, pathKeyframes = remove_center_duplicates(interleavedTimestamps, pathKeyframes)
-        pathTimestamp = np.round((pathTimestamp-pathTimestamp[0])/(pathTimestamp[-1]-pathTimestamp[0]), 4)
-        animateMotionDict = {
-            "mpath":        {"@href": "#"+pathId},
-            "@begin":       f"{animationStartTimeSec}s",
-            "@dur":         f"{animationDorationSec}s",
-            "@calcMode":    "linear",
-            "@keyTimes":    ";".join(pathTimestamp.astype(str)),
-            "@keyPoints":   ";".join(pathKeyframes.astype(str)),
-            "@rotate":      symbolRotation,
-            "@fill":        "remove", #keep final state of animation
-            "@repeatCount": 1,
-        }
-        pathDict = {
-            "@style": "fill:#11ff0a;stroke:#000000;stroke-width:1;stroke-linecap:square;stroke-linejoin:round;visibility:hidden",
-            "@d": "M 20,0 -20,-15 -12,0 -20,15 z",
-            "animate": [animateVisibilityDict, animateColorDict],
-            "animateMotion": animateMotionDict,
-        }
-        pathList.append(pathDict)
-        #print(pathDict)
+            print("split line")
+            animDataList = []
+            digits = [char for char in rawLineName if char.isdigit()]
+            for splitIdx in range(2):
+                lineName      = "S"+digits[splitIdx]
+                lineStopRefs  = [station[0] for station in linesStations[lineName]]
+                lineFilter    = np.isin(interleavedStopRefs, lineStopRefs)
+                if splitIdx == 1:
+                    lineFilter &= ~firstLineFilter #make unique split and prefer first line for assignment
+                    lineFilterExpanded = lineFilter.copy() #ensure overlap, so the train does not teleport when changing between lines
+                    lineFilterExpanded[1:]  |= lineFilter[:-1]
+                    lineFilterExpanded[:-1] |= lineFilter[1:]
+                    lineFilter = lineFilterExpanded
+                    if np.any(~(lineFilter | firstLineFilter)):
+                        print("WARN: incomplete coverage by the two lines")
+                else:
+                    firstLineFilter = lineFilter
+                inLineStops = interleavedStopRefs[lineFilter]
+                inLineAnimT = interleavedAnimT[lineFilter]
+                if len(inLineStops) < 3:
+                    print("line is short")
+                    continue
+                if lineStopRefs.index(inLineStops[0]) < lineStopRefs.index(inLineStops[2]):
+                    lineDir = "auto"
+                else:
+                    lineDir = "auto-reverse"
+                animDataList.append({
+                     "lineName": lineName,
+                     "timestamps": interleavedAnimT[lineFilter],
+                     "delayColor": interpolateDelayColor(interleavedDelay[lineFilter]/60),
+                     "symbolRotation": lineDir,
+                })
+                animDataList[-1]["pathValues"] = np.empty(inLineAnimT.shape, dtype=float)
+                for tsIdx in range(len(animDataList[-1]["timestamps"])):
+                    animDataList[-1]["pathValues"][tsIdx] = getPathStationLengthRatio(linesPathDict, lineName, inLineStops[tsIdx])
+        for animData in animDataList:
+            animationStartTimeSec = animData["timestamps"][0] / timeCompression
+            animationDorationSec  = (animData["timestamps"][-1] - animData["timestamps"][0]) / timeCompression
+
+            animateVisibilityDict = {
+                "@attributeName": "visibility",
+                "@begin":         f"{animationStartTimeSec}s",
+                "@dur":           f"{animationDorationSec}s",
+                "@values":        "visible",
+            }
+            colorTimestamp, delayColors = remove_center_duplicates(animData["timestamps"], animData["delayColor"])
+            colorTimestamp = np.round((colorTimestamp-colorTimestamp[0])/(colorTimestamp[-1]-colorTimestamp[0]), 4)
+            animateColorDict = {
+                "@attributeName": "fill",
+                "@begin":         f"{animationStartTimeSec}s",
+                "@dur":           f"{animationDorationSec}s",
+                "@keyTimes":      ";".join(colorTimestamp.astype(str)),
+                "@values":        ";".join(delayColors),
+            }
+            pathTimestamp, pathKeyframes = remove_center_duplicates(animData["timestamps"], animData["pathValues"])
+            pathTimestamp = np.round((pathTimestamp-pathTimestamp[0])/(pathTimestamp[-1]-pathTimestamp[0]), 4)
+            pathKeyframes = np.round(pathKeyframes, 4)
+            animateMotionDict = {
+                "mpath":        {"@href": "#"+animData["lineName"]},
+                "@begin":       f"{animationStartTimeSec}s",
+                "@dur":         f"{animationDorationSec}s",
+                "@keyTimes":    ";".join(pathTimestamp.astype(str)),
+                "@keyPoints":   ";".join(pathKeyframes.astype(str)),
+                "@rotate":      animData["symbolRotation"],
+                "@calcMode":    "linear"
+            }
+            pathDict = {
+                "@style": "fill:#11ff0a;stroke:#000000;stroke-width:1;visibility:hidden",
+                "@d": "M 20,0 -20,-15 -12,0 -20,15 z",
+                "animate": [animateVisibilityDict, animateColorDict],
+                "animateMotion": animateMotionDict,
+            }
+            pathList.append(pathDict)
     svgDict["svg"]["g"].append({
         "@id": "arrows",
         "path": pathList,
     })
-    """
 
     #clock and title
     startDatetime = datetime.fromtimestamp(startUnixTimestamp, timezone.utc)
@@ -336,16 +400,9 @@ def render_mp4_for_date(startUnixTimestamp, endUnixTimestamp, timeCompression, o
     #export
     with open("testAnimated.svg", "w") as outputSvg:
         outputSvg.write(xmltodict.unparse(svgDict, pretty=True))
-        """"
-
-        title = "Livekarte, aktualisiert "
-        title += str(analysisTime.astype(datetime).strftime('%d.%m.%Y %H:%M:%S'))
-        svgDictCopy = deepcopy(svgDict)
-        visualizeMap.changeMapTitle(svgDictCopy, title)
-    """
 
 
 #timestamp = int(datetime.now(timezone.utc).timestamp())
-timestamp = 1773100800
-timeCompression = 600
+timestamp = 1773100800+60*60*6.5
+timeCompression = 300
 render_mp4_for_date(timestamp-24*60*60, timestamp, timeCompression, "test.svg")
