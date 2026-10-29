@@ -38,7 +38,7 @@ if len(sys.argv)==1 or (sys.argv[1] == "live"):
 
     #upload only new live data
     for src_path in www_dir.iterdir():
-        if "live" in src_path.name:
+        if "live" in src_path.name or ".json" in src_path.suffix:
             scp_command = ['/run/current-system/sw/bin/scp', src_path, remote_webroot]
             try:
                 subprocess.run(scp_command, check=True)
